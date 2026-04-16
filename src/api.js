@@ -27,6 +27,11 @@ export async function completeTask(id) {
   return res.json();
 }
 
+export async function uncompleteTask(id) {
+  const res = await fetch(`/api/tasks/${id}/uncomplete`, { method: 'POST' });
+  return res.json();
+}
+
 export async function toggleProgress(id) {
   const res = await fetch(`/api/tasks/${id}/toggle-progress`, { method: 'POST' });
   return res.json();

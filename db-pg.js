@@ -209,6 +209,10 @@ async function completeTask(taskId, completedAt) {
   );
 }
 
+async function uncompleteTask(taskId) {
+  await q('DELETE FROM task_completed WHERE task_id = $1', [taskId]);
+}
+
 async function toggleInProgress(taskId) {
   const { rows } = await q('SELECT 1 FROM task_in_progress WHERE task_id = $1', [taskId]);
   if (rows.length > 0) {
@@ -271,4 +275,4 @@ async function deleteTask(id) {
   await q('DELETE FROM day_done WHERE task_id = $1', [id]);
 }
 
-module.exports = { init, getState, getProjects, completeTask, toggleInProgress, assignToDay, removeFromDay, toggleDayDone, setWeeklyPeople, createTask, updateTask, deleteTask, updateProject };
+module.exports = { init, getState, getProjects, completeTask, uncompleteTask, toggleInProgress, assignToDay, removeFromDay, toggleDayDone, setWeeklyPeople, createTask, updateTask, deleteTask, updateProject };

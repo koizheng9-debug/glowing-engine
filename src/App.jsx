@@ -32,7 +32,7 @@ function getWeekDates() {
 
 // ── Components ───────────────────────────────────────────────────────
 
-function TaskRow({ task, accent, bg, done, onComplete, inProgressIds = [], onUpdate, onDelete }) {
+function TaskRow({ task, accent, bg, done, onComplete, onUncomplete, onUpdate, onDelete }) {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(task.title);
@@ -133,12 +133,23 @@ function TaskRow({ task, accent, bg, done, onComplete, inProgressIds = [], onUpd
             </div>
           )}
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: 6, flexShrink: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 5, marginLeft: 6, flexShrink: 0 }}>
           {!done && hovered && onUpdate && (
             <button onClick={startEdit} style={{ fontSize: 10, padding: "2px 7px", borderRadius: 6, border: "1px solid #e5e7eb", background: "#fff", color: "#9ca3af", cursor: "pointer", whiteSpace: "nowrap" }}>编辑</button>
           )}
           {!done && onComplete && (
-            <button onClick={() => onComplete(task.id)} style={{ fontSize: 10, padding: "2px 7px", borderRadius: 6, border: `1px solid ${accent}`, background: "transparent", color: accent, cursor: "pointer", whiteSpace: "nowrap" }}>完成</button>
+            <>
+              <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 6, background: "#dbeafe", color: "#2563eb", fontWeight: 500, whiteSpace: "nowrap" }}>进行中</span>
+              <button onClick={() => onComplete(task.id)} style={{ fontSize: 10, padding: "2px 7px", borderRadius: 6, border: "1px solid #d1d5db", background: "transparent", color: "#9ca3af", cursor: "pointer", whiteSpace: "nowrap" }}>✓ 完成</button>
+            </>
+          )}
+          {done && (
+            <>
+              <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 6, background: "#d1fae5", color: "#059669", fontWeight: 500, whiteSpace: "nowrap" }}>已完成</span>
+              {onUncomplete && (
+                <button onClick={() => onUncomplete(task.id)} style={{ fontSize: 10, padding: "2px 7px", borderRadius: 6, border: "1px solid #d1d5db", background: "transparent", color: "#9ca3af", cursor: "pointer", whiteSpace: "nowrap" }}>↩ 恢复</button>
+              )}
+            </>
           )}
           {task.steps?.length > 0 && <span onClick={() => setOpen(!open)} style={{ fontSize: 9, color: "#d1d5db", cursor: "pointer" }}>{open ? "▲" : "▼"}</span>}
         </div>
@@ -157,7 +168,7 @@ function TaskRow({ task, accent, bg, done, onComplete, inProgressIds = [], onUpd
   );
 }
 
-function DoneSection({ tasks, accent, bg }) {
+function DoneSection({ tasks, accent, bg, onUncomplete }) {
   const [open, setOpen] = useState(false);
   if (!tasks || tasks.length === 0) return null;
   return (
@@ -170,7 +181,7 @@ function DoneSection({ tasks, accent, bg }) {
         <span style={{ fontSize: 10.5, color: "#d1d5db" }}>✅ 已完成 {tasks.length} 项</span>
         <span style={{ fontSize: 9, color: "#e5e7eb", marginLeft: "auto" }}>{open ? "▲" : "▼"}</span>
       </div>
-      {open && tasks.map(t => <TaskRow key={t.id} task={t} accent={accent} bg={bg} done />)}
+      {open && tasks.map(t => <TaskRow key={t.id} task={t} accent={accent} bg={bg} done onUncomplete={onUncomplete} />)}
     </div>
   );
 }
@@ -229,7 +240,7 @@ function AddTaskInline({ project, onAdd }) {
   );
 }
 
-function ProjectCard({ project, onComplete, inProgressIds = [], onInProgress, onAddTask, onUpdateTask, onDeleteTask, onUpdateProject }) {
+function ProjectCard({ project, onComplete, onUncomplete, onAddTask, onUpdateTask, onDeleteTask, onUpdateProject }) {
   const [open, setOpen] = useState(true);
   const [showReason, setShowReason] = useState(false);
   const [editingProject, setEditingProject] = useState(false);
@@ -237,8 +248,9 @@ function ProjectCard({ project, onComplete, inProgressIds = [], onInProgress, on
   const [editEmoji, setEditEmoji] = useState(project.emoji);
   const [editReason, setEditReason] = useState(project.reason);
   const [headerHovered, setHeaderHovered] = useState(false);
-  const activeTasks = project.tasks.filter(t => !inProgressIds.includes(t.id));
-  const inProgressTasks = project.tasks.filter(t => inProgressIds.includes(t.id));
+  const [editingName, setEditingName] = useState(false);
+  const [nameValue, setNameValue] = useState(project.title);
+  const nameRef = useRef(null);
 
   const saveProject = () => {
     if (!editTitle.trim()) return;
@@ -257,15 +269,43 @@ function ProjectCard({ project, onComplete, inProgressIds = [], onInProgress, on
         style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "11px 14px", cursor: "pointer", borderLeft: `3px solid ${project.accent}`, background: open ? project.bg : "#fff", transition: "background 0.15s" }}
         onMouseEnter={() => setHeaderHovered(true)}
         onMouseLeave={() => setHeaderHovered(false)}
-        onClick={() => setOpen(!open)}
+        onClick={() => !editingName && setOpen(!open)}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 7, flex: 1, minWidth: 0 }}>
           <span style={{ fontSize: 14 }}>{project.emoji}</span>
-          <p style={{ fontSize: 12.5, fontWeight: 600, color: "#1f2937" }}>{project.title}</p>
-          {project.doneTasks?.length > 0 && <span style={{ fontSize: 9.5, background: "#f3f4f6", color: "#9ca3af", padding: "1px 6px", borderRadius: 99 }}>{project.doneTasks.length} ✓</span>}
+          {editingName ? (
+            <input
+              ref={nameRef}
+              value={nameValue}
+              onChange={e => setNameValue(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === "Enter") {
+                  if (nameValue.trim()) {
+                    onUpdateProject && onUpdateProject(project.id, { title: nameValue.trim(), emoji: project.emoji, reason: project.reason });
+                  }
+                  setEditingName(false);
+                }
+                if (e.key === "Escape") { setNameValue(project.title); setEditingName(false); }
+              }}
+              onBlur={() => {
+                if (nameValue.trim() && nameValue.trim() !== project.title) {
+                  onUpdateProject && onUpdateProject(project.id, { title: nameValue.trim(), emoji: project.emoji, reason: project.reason });
+                }
+                setEditingName(false);
+              }}
+              onClick={e => e.stopPropagation()}
+              style={{ fontSize: 12.5, fontWeight: 600, color: "#1f2937", border: "1px solid #e5e7eb", borderRadius: 6, padding: "2px 8px", outline: "none", background: "#fff", fontFamily: "inherit", flex: 1, minWidth: 0 }}
+            />
+          ) : (
+            <p
+              style={{ fontSize: 12.5, fontWeight: 600, color: "#1f2937", cursor: "text", borderBottom: headerHovered ? "1px dashed #d1d5db" : "1px solid transparent" }}
+              onClick={e => { e.stopPropagation(); setNameValue(project.title); setEditingName(true); setTimeout(() => nameRef.current?.focus(), 50); }}
+            >{project.title}</p>
+          )}
+          {!editingName && project.doneTasks?.length > 0 && <span style={{ fontSize: 9.5, background: "#f3f4f6", color: "#9ca3af", padding: "1px 6px", borderRadius: 99 }}>{project.doneTasks.length} ✓</span>}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          {headerHovered && onUpdateProject && (
+          {headerHovered && onUpdateProject && !editingName && (
             <button
               onClick={e => { e.stopPropagation(); setEditTitle(project.title); setEditEmoji(project.emoji); setEditReason(project.reason); setEditingProject(true); setOpen(true); }}
               style={{ fontSize: 10, padding: "2px 7px", borderRadius: 6, border: "1px solid #e5e7eb", background: "#fff", color: "#9ca3af", cursor: "pointer" }}
@@ -311,14 +351,8 @@ function ProjectCard({ project, onComplete, inProgressIds = [], onInProgress, on
           )}
 
           <div>
-            {activeTasks.map(t => <TaskRow key={t.id} task={t} accent={project.accent} bg={project.bg} onComplete={onComplete} onUpdate={onUpdateTask} onDelete={onDeleteTask} />)}
-            {inProgressTasks.length > 0 && (
-              <div style={{ borderTop: "1px solid #fde68a", background: "#fffbeb" }}>
-                <div style={{ padding: "6px 14px 2px", fontSize: 10.5, color: "#92400e", fontWeight: 500 }}>⏳ 进行中</div>
-                {inProgressTasks.map(t => <TaskRow key={t.id} task={t} accent="#f59e0b" bg="#fef3c7" onComplete={onComplete} onUpdate={onUpdateTask} onDelete={onDeleteTask} />)}
-              </div>
-            )}
-            <DoneSection tasks={project.doneTasks} accent={project.accent} bg={project.bg} />
+            {project.tasks.map(t => <TaskRow key={t.id} task={t} accent={project.accent} bg={project.bg} onComplete={onComplete} onUpdate={onUpdateTask} onDelete={onDeleteTask} />)}
+            <DoneSection tasks={project.doneTasks} accent={project.accent} bg={project.bg} onUncomplete={onUncomplete} />
             <AddTaskInline project={project} onAdd={onAddTask} />
           </div>
         </>
@@ -377,14 +411,14 @@ function FlatTaskCard({ task, onComplete, done, completedDate }) {
 
 // ── Week View ────────────────────────────────────────────────────────
 
-function UnscheduledRow({ task: t, onComplete, onDragStart, onTap, isInProgress }) {
+function UnscheduledRow({ task: t, onComplete, onDragStart, onTap }) {
   const [open, setOpen] = useState(false);
   return (
-    <div draggable={!!onDragStart} onDragStart={onDragStart} style={{ borderTop: "1px solid #f3f4f6", background: isInProgress ? "#fffbeb" : "transparent" }}>
+    <div draggable={!!onDragStart} onDragStart={onDragStart} style={{ borderTop: "1px solid #f3f4f6" }}>
       <div
         style={{ padding: "9px 14px", display: "flex", alignItems: "center", gap: 8, cursor: onDragStart ? "grab" : "default" }}
-        onMouseEnter={e => e.currentTarget.style.background = isInProgress ? "#fef3c7" : t.projectBg}
-        onMouseLeave={e => e.currentTarget.style.background = isInProgress ? "#fffbeb" : "transparent"}
+        onMouseEnter={e => e.currentTarget.style.background = t.projectBg}
+        onMouseLeave={e => e.currentTarget.style.background = "transparent"}
       >
         <div style={{ width: 3, height: 28, borderRadius: 2, background: t.projectAccent, flexShrink: 0 }} />
         <div style={{ flex: 1 }}>
@@ -415,7 +449,7 @@ function UnscheduledRow({ task: t, onComplete, onDragStart, onTap, isInProgress 
 }
 
 function WeekView({
-  allTasksFlat, completedIds, inProgressIds = [], onComplete, onInProgress,
+  allTasksFlat, completedIds, onComplete,
   calendarMap, dayDoneMap, weeklyPeople,
   onAssignToDay, onRemoveFromDay, onToggleDayDone,
 }) {
@@ -434,7 +468,7 @@ function WeekView({
   };
 
   const scheduledIds = new Set(Object.values(calendarMap).flat());
-  const unscheduled = activeTasks.filter(t => !scheduledIds.has(t.id) || inProgressIds.includes(t.id));
+  const unscheduled = activeTasks.filter(t => !scheduledIds.has(t.id));
 
   return (
     <div>
@@ -479,7 +513,6 @@ function WeekView({
                   {dayTasks.map(t => {
                     const isFullyDone = completedIds.includes(t.id);
                     const isDayDone = (dayDoneMap[day.key] || []).includes(t.id);
-                    const isInProgress = inProgressIds.includes(t.id) && !isFullyDone;
                     const showDone = isFullyDone || isDayDone;
                     return (
                       <div key={t.id}
@@ -487,9 +520,9 @@ function WeekView({
                         onDragStart={() => !showDone && setDragging(t.id)}
                         onDragEnd={() => setDragging(null)}
                         onClick={() => !isFullyDone && onToggleDayDone(day.key, t.id)}
-                        style={{ fontSize: 12, color: showDone ? "#9ca3af" : isInProgress ? "#92400e" : "#374151", background: showDone ? "#f9fafb" : isInProgress ? "#fef3c7" : t.projectBg, borderLeft: "2px solid " + (showDone ? "#d1d5db" : isInProgress ? "#f59e0b" : t.projectAccent), padding: "5px 7px", borderRadius: 6, cursor: showDone ? "default" : "pointer", display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 4, opacity: showDone ? 0.6 : 1 }}>
+                        style={{ fontSize: 12, color: showDone ? "#9ca3af" : "#374151", background: showDone ? "#f9fafb" : t.projectBg, borderLeft: "2px solid " + (showDone ? "#d1d5db" : t.projectAccent), padding: "5px 7px", borderRadius: 6, cursor: showDone ? "default" : "pointer", display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 4, opacity: showDone ? 0.6 : 1 }}>
                         <span style={{ lineHeight: 1.4, flex: 1, textDecoration: showDone ? "line-through" : "none" }}>
-                          {showDone ? "✓ " : isInProgress ? "⏳ " : ""}{t.title}
+                          {showDone ? "✓ " : ""}{t.title}
                         </span>
                         {!showDone && <span onClick={e => { e.stopPropagation(); onRemoveFromDay(day.key, t.id); }} style={{ fontSize: 11, color: "#d1d5db", cursor: "pointer", flexShrink: 0 }}>✕</span>}
                       </div>
@@ -522,8 +555,7 @@ function WeekView({
         {unscheduled.map(t => (
           <UnscheduledRow key={t.id} task={t} onComplete={onComplete}
             onDragStart={() => setDragging(t.id)}
-            onTap={() => setPicking(t.id)}
-            isInProgress={inProgressIds.includes(t.id)} />
+            onTap={() => setPicking(t.id)} />
         ))}
       </div>
     </div>
@@ -624,6 +656,12 @@ export default function App() {
     api.completeTask(taskId);
   }, []);
 
+  const handleUncomplete = useCallback((taskId) => {
+    setCompletedIds(prev => prev.filter(id => id !== taskId));
+    setCompletedDates(prev => { const next = { ...prev }; delete next[taskId]; return next; });
+    api.uncompleteTask(taskId);
+  }, []);
+
   const handleAddTask = useCallback(async ({ projectId, title, deadline, note }) => {
     const res = await api.createTask({ projectId, title, deadline, note });
     if (res.ok && res.task) {
@@ -719,8 +757,8 @@ export default function App() {
         {/* Board */}
         {activeTab === "board" && (
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, alignItems: "start" }}>
-            <div>{leftProjects.map(p => <ProjectCard key={p.id} project={p} onComplete={handleComplete} inProgressIds={inProgressIds} onAddTask={handleAddTask} onUpdateTask={handleUpdateTask} onDeleteTask={handleDeleteTask} onUpdateProject={handleUpdateProject} />)}</div>
-            <div>{rightProjects.map(p => <ProjectCard key={p.id} project={p} onComplete={handleComplete} inProgressIds={inProgressIds} onAddTask={handleAddTask} onUpdateTask={handleUpdateTask} onDeleteTask={handleDeleteTask} onUpdateProject={handleUpdateProject} />)}</div>
+            <div>{leftProjects.map(p => <ProjectCard key={p.id} project={p} onComplete={handleComplete} onUncomplete={handleUncomplete} onAddTask={handleAddTask} onUpdateTask={handleUpdateTask} onDeleteTask={handleDeleteTask} onUpdateProject={handleUpdateProject} />)}</div>
+            <div>{rightProjects.map(p => <ProjectCard key={p.id} project={p} onComplete={handleComplete} onUncomplete={handleUncomplete} onAddTask={handleAddTask} onUpdateTask={handleUpdateTask} onDeleteTask={handleDeleteTask} onUpdateProject={handleUpdateProject} />)}</div>
           </div>
         )}
 
@@ -729,7 +767,6 @@ export default function App() {
           <WeekView
             allTasksFlat={allTasksFlat}
             completedIds={completedIds}
-            inProgressIds={inProgressIds}
             onComplete={handleComplete}
             calendarMap={calendarMap}
             dayDoneMap={dayDoneMap}

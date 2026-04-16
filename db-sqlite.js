@@ -212,6 +212,10 @@ async function completeTask(taskId, completedAt) {
   db.prepare('INSERT OR REPLACE INTO task_completed (task_id, completed_at) VALUES (?, ?)').run(taskId, completedAt);
 }
 
+async function uncompleteTask(taskId) {
+  db.prepare('DELETE FROM task_completed WHERE task_id = ?').run(taskId);
+}
+
 async function toggleInProgress(taskId) {
   const exists = db.prepare('SELECT 1 AS one FROM task_in_progress WHERE task_id = ?').get(taskId);
   if (exists) { db.prepare('DELETE FROM task_in_progress WHERE task_id = ?').run(taskId); return false; }
@@ -263,4 +267,4 @@ async function deleteTask(id) {
   db.prepare('DELETE FROM day_done WHERE task_id = ?').run(id);
 }
 
-module.exports = { init, getState, getProjects, completeTask, toggleInProgress, assignToDay, removeFromDay, toggleDayDone, setWeeklyPeople, createTask, updateTask, deleteTask, updateProject };
+module.exports = { init, getState, getProjects, completeTask, uncompleteTask, toggleInProgress, assignToDay, removeFromDay, toggleDayDone, setWeeklyPeople, createTask, updateTask, deleteTask, updateProject };

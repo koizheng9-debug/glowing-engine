@@ -63,6 +63,11 @@ app.post('/api/tasks/:id/complete', async (req, res) => {
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+app.post('/api/tasks/:id/uncomplete', async (req, res) => {
+  try { await db.uncompleteTask(req.params.id); res.json({ ok: true }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 app.post('/api/tasks/:id/toggle-progress', async (req, res) => {
   try { const inProgress = await db.toggleInProgress(req.params.id); res.json({ ok: true, inProgress }); }
   catch (e) { res.status(500).json({ error: e.message }); }
