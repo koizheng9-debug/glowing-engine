@@ -361,10 +361,10 @@ function ProjectCard({ project, onComplete, onUncomplete, onAddTask, onUpdateTas
   );
 }
 
-function FlatTaskCard({ task, onComplete, done, completedDate }) {
+function FlatTaskCard({ task, onComplete, onUncomplete, done, completedDate }) {
   const [open, setOpen] = useState(false);
   return (
-    <div style={{ background: "#fff", borderRadius: 11, border: "1px solid #f0f0f0", overflow: "hidden", boxShadow: "0 1px 3px rgba(0,0,0,0.04)", opacity: done ? 0.5 : 1 }}>
+    <div style={{ background: "#fff", borderRadius: 11, border: "1px solid #f0f0f0", overflow: "hidden", boxShadow: "0 1px 3px rgba(0,0,0,0.04)", opacity: done ? 0.7 : 1 }}>
       <div
         style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", padding: "10px 14px", borderLeft: `3px solid ${task.projectAccent}` }}
         onMouseEnter={e => e.currentTarget.style.background = task.projectBg}
@@ -391,6 +391,9 @@ function FlatTaskCard({ task, onComplete, done, completedDate }) {
         <div style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: 8, flexShrink: 0 }}>
           {!done && onComplete && (
             <button onClick={() => onComplete(task.id)} style={{ fontSize: 10, padding: "2px 7px", borderRadius: 6, border: `1px solid ${task.projectAccent}`, background: "transparent", color: task.projectAccent, cursor: "pointer" }}>完成</button>
+          )}
+          {done && onUncomplete && (
+            <button onClick={() => onUncomplete(task.id)} style={{ fontSize: 10, padding: "2px 7px", borderRadius: 6, border: "1px solid #f59e0b", background: "transparent", color: "#f59e0b", cursor: "pointer", whiteSpace: "nowrap" }}>↩ 撤回</button>
           )}
           {task.steps?.length > 0 && <span onClick={() => setOpen(!open)} style={{ fontSize: 9, color: "#d1d5db", cursor: "pointer" }}>{open ? "▲" : "▼"}</span>}
         </div>
@@ -467,8 +470,8 @@ function WeekView({
     setDragging(null);
   };
 
-  const scheduledIds = new Set(Object.values(calendarMap).flat());
-  const unscheduled = activeTasks.filter(t => !scheduledIds.has(t.id));
+  // Show ALL active tasks in 待排, even if already scheduled (tasks may span multiple days)
+  const unscheduled = activeTasks;
 
   return (
     <div>
@@ -796,7 +799,7 @@ export default function App() {
             {doneTasks.length === 0 && (
               <p style={{ color: "#9ca3af", fontSize: 13, textAlign: "center", marginTop: 40 }}>还没有已完成的任务</p>
             )}
-            {doneTasks.map(t => <FlatTaskCard key={t.id} task={t} done completedDate={completedDates[t.id]} />)}
+            {doneTasks.map(t => <FlatTaskCard key={t.id} task={t} done completedDate={completedDates[t.id]} onUncomplete={handleUncomplete} />)}
           </div>
         )}
       </div>
