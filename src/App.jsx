@@ -9,17 +9,16 @@ const WEEKLY_HABITS = [
   { id: "h4", text: "看我的 Daily News + Twitter 总结系统", emoji: "📰" },
 ];
 
-const DAYS = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
+const DAYS = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
 
-function getWeekDates() {
+function getWeekDates(offset = 0) {
   const today = new Date();
-  const day = today.getDay();
-  const diff = day === 0 ? 1 : 1 - day;
-  const monday = new Date(today);
-  monday.setDate(today.getDate() + diff);
+  const dayOfWeek = today.getDay(); // 0 = Sunday
+  const sunday = new Date(today);
+  sunday.setDate(today.getDate() - dayOfWeek + offset * 7);
   return DAYS.map((label, i) => {
-    const d = new Date(monday);
-    d.setDate(monday.getDate() + i);
+    const d = new Date(sunday);
+    d.setDate(sunday.getDate() + i);
     return {
       label,
       date: d,
@@ -460,7 +459,7 @@ function WeekView({
   const [dragging, setDragging] = useState(null);
   const weekDates = getWeekDates();
 
-  const schedulableTasks = allTasksFlat.filter(t => t.priority !== "later" && !t.calendarOnly);
+  const schedulableTasks = allTasksFlat.filter(t => !t.calendarOnly);
   const activeTasks = schedulableTasks.filter(t => !completedIds.includes(t.id));
   const taskById = (id) => allTasksFlat.find(t => t.id === id);
 
@@ -586,13 +585,123 @@ function PeopleCell({ dayKey, people }) {
   );
 }
 
+// ── Past Weeks View ─────────────────────────────────────────────────
+
+function PastWeeksView({ allTasksFlat, calendarMap, dayDoneMap, completedIds, weeklyPeople }) {
+  // Find all day_keys that have calendar data
+  const allDayKeys = Object.keys(calendarMap).filter(k => (calendarMap[k] || []).length > 0);
+
+  // Group by week: find the Sunday for each day_key
+  const weekSundays = new Set();
+  for (const dayKey of allDayKeys) {
+    const d = new Date(dayKey + "T00:00:00");
+    const dow = d.getDay();
+    const sun = new Date(d);
+    sun.setDate(d.getDate() - dow);
+    weekSundays.add(`${sun.getFullYear()}-${String(sun.getMonth()+1).padStart(2,"0")}-${String(sun.getDate()).padStart(2,"0")}`);
+  }
+
+  // Current week's Sunday
+  const today = new Date();
+  const curSun = new Date(today);
+  curSun.setDate(today.getDate() - today.getDay());
+  const curSunKey = `${curSun.getFullYear()}-${String(curSun.getMonth()+1).padStart(2,"0")}-${String(curSun.getDate()).padStart(2,"0")}`;
+
+  // Only past weeks, most recent first
+  const pastSundays = [...weekSundays].filter(s => s < curSunKey).sort().reverse();
+
+  const taskById = (id) => allTasksFlat.find(t => t.id === id);
+
+  if (pastSundays.length === 0) {
+    return (
+      <div style={{ textAlign: "center", marginTop: 50 }}>
+        <p style={{ fontSize: 26, marginBottom: 6 }}>📅</p>
+        <p style={{ color: "#9ca3af", fontSize: 13 }}>还没有往期记录</p>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      {pastSundays.map(sundayKey => {
+        const sun = new Date(sundayKey + "T00:00:00");
+        const weekDays = DAYS.map((label, i) => {
+          const d = new Date(sun);
+          d.setDate(sun.getDate() + i);
+          return {
+            label,
+            dateStr: `${d.getMonth() + 1}/${d.getDate()}`,
+            key: `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`,
+          };
+        });
+        const weekLabel = `${weekDays[0].dateStr} ~ ${weekDays[6].dateStr}`;
+
+        // Count tasks done this week
+        let totalTasks = 0, doneTasks = 0;
+        for (const day of weekDays) {
+          const ids = calendarMap[day.key] || [];
+          totalTasks += ids.length;
+          for (const id of ids) {
+            if (completedIds.includes(id) || (dayDoneMap[day.key] || []).includes(id)) doneTasks++;
+          }
+        }
+
+        return (
+          <div key={sundayKey} style={{ background: "#fff", borderRadius: 12, border: "1px solid #f0f0f0", overflow: "hidden" }}>
+            <div style={{ padding: "10px 14px", borderBottom: "1px solid #f3f4f6", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <p style={{ fontSize: 13, fontWeight: 600, color: "#374151" }}>📅 {weekLabel}</p>
+              {totalTasks > 0 && (
+                <span style={{ fontSize: 11, color: "#9ca3af" }}>
+                  {doneTasks}/{totalTasks} 完成
+                </span>
+              )}
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4, padding: "10px 8px" }}>
+              {weekDays.map(day => {
+                const dayTasks = (calendarMap[day.key] || []).map(taskById).filter(Boolean);
+                const people = weeklyPeople[day.key] || "";
+                return (
+                  <div key={day.key} style={{ background: "#f9fafb", borderRadius: 8, padding: "6px 5px", minHeight: 80 }}>
+                    <div style={{ fontSize: 10, fontWeight: 500, color: "#9ca3af", marginBottom: 6, textAlign: "center" }}>
+                      {day.label}<br /><span style={{ fontSize: 9 }}>{day.dateStr}</span>
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                      {dayTasks.map(t => {
+                        const isDone = completedIds.includes(t.id) || (dayDoneMap[day.key] || []).includes(t.id);
+                        return (
+                          <div key={t.id} style={{
+                            fontSize: 10, padding: "3px 5px", borderRadius: 4,
+                            borderLeft: `2px solid ${isDone ? "#d1d5db" : (t.projectAccent || "#6366f1")}`,
+                            background: isDone ? "#f3f4f6" : (t.projectBg || "#fff"),
+                            color: isDone ? "#9ca3af" : "#374151",
+                            textDecoration: isDone ? "line-through" : "none",
+                            opacity: isDone ? 0.6 : 1,
+                          }}>
+                            {isDone ? "✓ " : ""}{t.title}
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {people && (
+                      <div style={{ marginTop: 4, fontSize: 9, color: "#9ca3af" }}>👤 {people}</div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ── Main App ─────────────────────────────────────────────────────────
 
 const TABS = [
   { key: "board", label: "Projects", flex: true },
   { key: "week",  label: "本周",     flex: true },
-  { key: "later", label: "本周之后", color: "#9ca3af", bg: "#f9fafb", flex: false },
-  { key: "done",  label: "已完成",   color: "#10b981", bg: "#f0fdf4", flex: false },
+  { key: "past",  label: "往期",     color: "#9ca3af", bg: "#f9fafb", flex: false },
 ];
 
 export default function App() {
@@ -633,13 +742,6 @@ export default function App() {
   );
 
   const activeTasks   = allTasksFlat.filter(t => !completedIds.includes(t.id));
-  const doneTasks     = allTasksFlat.filter(t =>  completedIds.includes(t.id));
-  const laterTasks    = activeTasks.filter(t => t.priority === "later");
-
-  const counts = {
-    later: laterTasks.length,
-    done:  doneTasks.length,
-  };
 
   // Projects enriched with split active/done task lists
   const projectsWithState = projects.map(p => ({
@@ -740,7 +842,6 @@ export default function App() {
         <div style={{ display: "flex", gap: 3, marginBottom: 18, background: "#fff", padding: 5, borderRadius: 14, border: "1px solid #f0f0f0", boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}>
           {TABS.map(tab => {
             const active = activeTab === tab.key;
-            const count = counts[tab.key];
             return (
               <button key={tab.key} onClick={() => setActiveTab(tab.key)} style={{
                 flex: tab.flex ? 1 : "0 0 auto", padding: tab.flex ? "7px 4px" : "7px 14px",
@@ -748,10 +849,8 @@ export default function App() {
                 background: active ? (tab.bg || "#f3f4f6") : "transparent",
                 color: active ? (tab.color || "#374151") : "#9ca3af",
                 fontWeight: active ? 600 : 400, fontSize: 12, transition: "all 0.15s",
-                display: "flex", flexDirection: "column", alignItems: "center", gap: 1,
               }}>
-                <span>{tab.label}</span>
-                {count !== undefined && <span style={{ fontSize: 13, fontWeight: 700, color: active ? (tab.color || "#374151") : "#d1d5db" }}>{count}</span>}
+                {tab.label}
               </button>
             );
           })}
@@ -780,27 +879,15 @@ export default function App() {
           />
         </div>
 
-        {/* Later */}
-        {activeTab === "later" && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 8, maxWidth: 600 }}>
-            {laterTasks.length === 0 && (
-              <div style={{ textAlign: "center", marginTop: 50 }}>
-                <p style={{ fontSize: 26, marginBottom: 6 }}>✨</p>
-                <p style={{ color: "#9ca3af", fontSize: 13 }}>这里没有任务，很好！</p>
-              </div>
-            )}
-            {laterTasks.map(t => <FlatTaskCard key={t.id} task={t} onComplete={handleComplete} />)}
-          </div>
-        )}
-
-        {/* Done */}
-        {activeTab === "done" && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 8, maxWidth: 600 }}>
-            {doneTasks.length === 0 && (
-              <p style={{ color: "#9ca3af", fontSize: 13, textAlign: "center", marginTop: 40 }}>还没有已完成的任务</p>
-            )}
-            {doneTasks.map(t => <FlatTaskCard key={t.id} task={t} done completedDate={completedDates[t.id]} onUncomplete={handleUncomplete} />)}
-          </div>
+        {/* Past weeks */}
+        {activeTab === "past" && (
+          <PastWeeksView
+            allTasksFlat={allTasksFlat}
+            calendarMap={calendarMap}
+            dayDoneMap={dayDoneMap}
+            completedIds={completedIds}
+            weeklyPeople={weeklyPeople}
+          />
         )}
       </div>
     </div>
