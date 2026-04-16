@@ -91,3 +91,18 @@ export async function setWeeklyPeople(dayKey, people) {
     body: JSON.stringify({ people }),
   });
 }
+
+export async function fetchHabits() {
+  const res = await fetch('/api/habits');
+  if (!res.ok) throw new Error('Failed to load habits');
+  const data = await res.json();
+  return data.habits;
+}
+
+export async function saveHabits(habits) {
+  await fetch('/api/habits', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ habits }),
+  });
+}

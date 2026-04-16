@@ -2,11 +2,11 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import * as api from "./api";
 
 // ── Static UI constants (not task data) ─────────────────────────────
-const WEEKLY_HABITS = [
-  { id: "h1", text: "至少见 2 个朋友", emoji: "🤝" },
-  { id: "h2", text: "画画课", emoji: "🎨" },
-  { id: "h3", text: "每天散步 + 听播客", emoji: "🎧" },
-  { id: "h4", text: "看我的 Daily News + Twitter 总结系统", emoji: "📰" },
+const DEFAULT_HABITS = [
+  { id: "h1", label: "🤝 至少见 2 个朋友" },
+  { id: "h2", label: "🎨 画画课" },
+  { id: "h3", label: "🎧 每天散步 + 听播客" },
+  { id: "h4", label: "📰 看我的 Daily News + Twitter 总结系统" },
 ];
 
 const DAYS = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
@@ -411,6 +411,61 @@ function FlatTaskCard({ task, onComplete, onUncomplete, done, completedDate }) {
   );
 }
 
+// ── Habits Bar (editable) ───────────────────────────────────────────
+
+function HabitsBar({ habits, onSave }) {
+  const [editingId, setEditingId] = useState(null);
+  const [editValue, setEditValue] = useState("");
+  const [adding, setAdding] = useState(false);
+  const [addValue, setAddValue] = useState("");
+
+  const startEdit = (h) => { setEditingId(h.id); setEditValue(h.label); };
+  const saveEdit = () => {
+    if (editValue.trim()) onSave(habits.map(h => h.id === editingId ? { ...h, label: editValue.trim() } : h));
+    setEditingId(null);
+  };
+  const deleteHabit = (id) => onSave(habits.filter(h => h.id !== id));
+  const saveAdd = () => {
+    if (addValue.trim()) {
+      const newId = "h_" + Math.random().toString(36).slice(2, 8);
+      onSave([...habits, { id: newId, label: addValue.trim() }]);
+    }
+    setAdding(false);
+    setAddValue("");
+  };
+
+  return (
+    <div style={{ background: "#fff", borderRadius: 12, border: "1px solid #f0f0f0", padding: "10px 14px", marginBottom: 14, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+      {habits.map(h => (
+        editingId === h.id ? (
+          <input key={h.id} autoFocus value={editValue}
+            onChange={e => setEditValue(e.target.value)}
+            onBlur={saveEdit}
+            onKeyDown={e => { if (e.key === "Enter") saveEdit(); if (e.key === "Escape") setEditingId(null); }}
+            style={{ fontSize: 11.5, color: "#374151", background: "#f3f4f6", padding: "3px 8px", borderRadius: 99, border: "1px solid #6366f1", outline: "none", width: 180, fontFamily: "inherit" }} />
+        ) : (
+          <span key={h.id} style={{ fontSize: 11.5, color: "#6b7280", background: "#f9fafb", padding: "4px 10px", borderRadius: 99, border: "1px solid #f0f0f0", display: "flex", alignItems: "center", gap: 4, cursor: "pointer" }}
+            onClick={() => startEdit(h)}>
+            <span>{h.label}</span>
+            <span onClick={e => { e.stopPropagation(); deleteHabit(h.id); }}
+              style={{ color: "#d1d5db", fontSize: 12, lineHeight: 1, marginLeft: 1 }}>×</span>
+          </span>
+        )
+      ))}
+      {adding ? (
+        <input autoFocus value={addValue} placeholder="新条目…"
+          onChange={e => setAddValue(e.target.value)}
+          onBlur={saveAdd}
+          onKeyDown={e => { if (e.key === "Enter") saveAdd(); if (e.key === "Escape") { setAdding(false); setAddValue(""); } }}
+          style={{ fontSize: 11.5, color: "#374151", background: "#f3f4f6", padding: "3px 8px", borderRadius: 99, border: "1px solid #6366f1", outline: "none", width: 160, fontFamily: "inherit" }} />
+      ) : (
+        <span onClick={() => setAdding(true)}
+          style={{ fontSize: 11.5, color: "#9ca3af", background: "#f9fafb", padding: "4px 10px", borderRadius: 99, border: "1px dashed #e5e7eb", cursor: "pointer" }}>+ 添加</span>
+      )}
+    </div>
+  );
+}
+
 // ── Week View ────────────────────────────────────────────────────────
 
 function UnscheduledRow({ task: t, onComplete, onDragStart, onTap }) {
@@ -454,6 +509,7 @@ function WeekView({
   allTasksFlat, completedIds, onComplete,
   calendarMap, dayDoneMap, weeklyPeople,
   onAssignToDay, onRemoveFromDay, onToggleDayDone,
+  weeklyHabits, onSaveHabits,
 }) {
   const [picking, setPicking] = useState(null);
   const [dragging, setDragging] = useState(null);
@@ -491,13 +547,7 @@ function WeekView({
         </div>
       )}
 
-      <div style={{ background: "#fff", borderRadius: 12, border: "1px solid #f0f0f0", padding: "10px 14px", marginBottom: 14, display: "flex", gap: 8, flexWrap: "wrap" }}>
-        {WEEKLY_HABITS.map(h => (
-          <span key={h.id} style={{ fontSize: 11.5, color: "#6b7280", background: "#f9fafb", padding: "4px 10px", borderRadius: 99, border: "1px solid #f0f0f0" }}>
-            {h.emoji} {h.text}
-          </span>
-        ))}
-      </div>
+      <HabitsBar habits={weeklyHabits} onSave={onSaveHabits} />
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 6, marginBottom: 16 }}>
         {weekDates.map(day => {
@@ -554,11 +604,32 @@ function WeekView({
         {unscheduled.length === 0 && (
           <p style={{ fontSize: 12, color: "#9ca3af", textAlign: "center", padding: "20px 14px" }}>所有任务都已排入本周 ✨</p>
         )}
-        {unscheduled.map(t => (
-          <UnscheduledRow key={t.id} task={t} onComplete={onComplete}
-            onDragStart={() => setDragging(t.id)}
-            onTap={() => setPicking(t.id)} />
-        ))}
+        {(() => {
+          const groups = [];
+          const seen = new Map();
+          for (const t of unscheduled) {
+            const key = t.projectId || "__none__";
+            if (!seen.has(key)) {
+              seen.set(key, groups.length);
+              groups.push({ key, projectTitle: t.projectTitle || "无项目", projectEmoji: t.projectEmoji || "", projectAccent: t.projectAccent || "#9ca3af", projectBg: t.projectBg || "#f9fafb", tasks: [] });
+            }
+            groups[seen.get(key)].tasks.push(t);
+          }
+          return groups.map(g => (
+            <div key={g.key}>
+              <div style={{ padding: "6px 14px", background: g.projectBg, borderTop: "1px solid #f3f4f6", display: "flex", alignItems: "center", gap: 6 }}>
+                {g.projectEmoji && <span style={{ fontSize: 13 }}>{g.projectEmoji}</span>}
+                <span style={{ fontSize: 11.5, fontWeight: 700, color: g.projectAccent }}>{g.projectTitle}</span>
+                <span style={{ fontSize: 11, color: "#9ca3af", marginLeft: "auto" }}>{g.tasks.length} 项</span>
+              </div>
+              {g.tasks.map(t => (
+                <UnscheduledRow key={t.id} task={t} onComplete={onComplete}
+                  onDragStart={() => setDragging(t.id)}
+                  onTap={() => setPicking(t.id)} />
+              ))}
+            </div>
+          ));
+        })()}
       </div>
     </div>
   );
@@ -715,16 +786,18 @@ export default function App() {
   const [calendarMap, setCalendarMap] = useState({});
   const [dayDoneMap, setDayDoneMap] = useState({});
   const [weeklyPeople, setWeeklyPeople] = useState({});
+  const [weeklyHabits, setWeeklyHabits] = useState(DEFAULT_HABITS);
 
   useEffect(() => {
-    Promise.all([api.fetchState(), api.fetchProjects()])
-      .then(([state, projs]) => {
+    Promise.all([api.fetchState(), api.fetchProjects(), api.fetchHabits()])
+      .then(([state, projs, habits]) => {
         setCompletedIds(state.completedIds || []);
         setCompletedDates(state.completedDates || {});
         setInProgressIds(state.inProgressIds || []);
         setCalendarMap(state.calendarMap || {});
         setDayDoneMap(state.dayDoneMap || {});
         setWeeklyPeople(state.weeklyPeople || {});
+        setWeeklyHabits(habits || DEFAULT_HABITS);
         setProjects(projs || []);
         setLoading(false);
       })
@@ -819,6 +892,11 @@ export default function App() {
     api.toggleDayDone(dayKey, taskId);
   }, []);
 
+  const handleSaveHabits = useCallback((habits) => {
+    setWeeklyHabits(habits);
+    api.saveHabits(habits);
+  }, []);
+
   // ── Render ────────────────────────────────────────────────────────
   if (loading) return (
     <div style={{ padding: 40, textAlign: "center", color: "#9ca3af", fontFamily: "'DM Sans', sans-serif" }}>加载中...</div>
@@ -876,6 +954,8 @@ export default function App() {
             onAssignToDay={handleAssignToDay}
             onRemoveFromDay={handleRemoveFromDay}
             onToggleDayDone={handleToggleDayDone}
+            weeklyHabits={weeklyHabits}
+            onSaveHabits={handleSaveHabits}
           />
         </div>
 

@@ -42,6 +42,10 @@ async function init() {
       reason TEXT NOT NULL DEFAULT '',
       sort_order INTEGER NOT NULL DEFAULT 0
     );
+    CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL DEFAULT ''
+    );
     CREATE TABLE IF NOT EXISTS tasks (
       id TEXT PRIMARY KEY,
       project_id TEXT NOT NULL,
@@ -166,4 +170,16 @@ async function deleteTask(id) {
   await q('DELETE FROM day_done WHERE task_id = $1', [id]);
 }
 
-module.exports = { init, getState, getProjects, completeTask, uncompleteTask, toggleInProgress, assignToDay, removeFromDay, toggleDayDone, setWeeklyPeople, createTask, updateTask, deleteTask, updateProject };
+async function getHabits() {
+  const { rows } = await q("SELECT value FROM settings WHERE key = 'weekly_habits'");
+  return rows.length ? JSON.parse(rows[0].value) : null;
+}
+
+async function setHabits(habits) {
+  await q(
+    "INSERT INTO settings (key, value) VALUES ('weekly_habits', $1) ON CONFLICT (key) DO UPDATE SET value = $1",
+    [JSON.stringify(habits)]
+  );
+}
+
+module.exports = { init, getState, getProjects, completeTask, uncompleteTask, toggleInProgress, assignToDay, removeFromDay, toggleDayDone, setWeeklyPeople, createTask, updateTask, deleteTask, updateProject, getHabits, setHabits };

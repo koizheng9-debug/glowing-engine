@@ -96,6 +96,18 @@ app.put('/api/weekly-people/:dayKey', async (req, res) => {
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+app.get('/api/habits', async (req, res) => {
+  try { res.json({ habits: await db.getHabits() }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.put('/api/habits', async (req, res) => {
+  const { habits } = req.body;
+  if (!Array.isArray(habits)) return res.status(400).json({ error: 'habits must be an array' });
+  try { await db.setHabits(habits); res.json({ ok: true }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // Fallback to React app for non-API routes
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));

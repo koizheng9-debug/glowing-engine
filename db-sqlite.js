@@ -36,6 +36,10 @@ db.exec(`
     reason TEXT NOT NULL DEFAULT '',
     sort_order INTEGER NOT NULL DEFAULT 0
   );
+  CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL DEFAULT ''
+  );
   CREATE TABLE IF NOT EXISTS tasks (
     id TEXT PRIMARY KEY,
     project_id TEXT NOT NULL,
@@ -149,4 +153,13 @@ async function deleteTask(id) {
   db.prepare('DELETE FROM day_done WHERE task_id = ?').run(id);
 }
 
-module.exports = { init, getState, getProjects, completeTask, uncompleteTask, toggleInProgress, assignToDay, removeFromDay, toggleDayDone, setWeeklyPeople, createTask, updateTask, deleteTask, updateProject };
+async function getHabits() {
+  const row = db.prepare("SELECT value FROM settings WHERE key = 'weekly_habits'").get();
+  return row ? JSON.parse(row.value) : null;
+}
+
+async function setHabits(habits) {
+  db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('weekly_habits', ?)").run(JSON.stringify(habits));
+}
+
+module.exports = { init, getState, getProjects, completeTask, uncompleteTask, toggleInProgress, assignToDay, removeFromDay, toggleDayDone, setWeeklyPeople, createTask, updateTask, deleteTask, updateProject, getHabits, setHabits };
