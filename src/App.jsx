@@ -411,6 +411,75 @@ function FlatTaskCard({ task, onComplete, onUncomplete, done, completedDate }) {
   );
 }
 
+// ── Add Project Card ────────────────────────────────────────────────
+
+const PROJECT_COLORS = [
+  { accent: "#6366f1", bg: "#eef2ff" },
+  { accent: "#f59e0b", bg: "#fffbeb" },
+  { accent: "#10b981", bg: "#ecfdf5" },
+  { accent: "#ef4444", bg: "#fef2f2" },
+  { accent: "#0ea5e9", bg: "#f0f9ff" },
+  { accent: "#8b5cf6", bg: "#f5f3ff" },
+  { accent: "#ec4899", bg: "#fdf2f8" },
+  { accent: "#14b8a6", bg: "#f0fdfa" },
+];
+
+function AddProjectCard({ onCreate }) {
+  const [open, setOpen] = useState(false);
+  const [title, setTitle] = useState("");
+  const [emoji, setEmoji] = useState("📁");
+  const [reason, setReason] = useState("");
+  const [colorIdx, setColorIdx] = useState(0);
+  const titleRef = useRef(null);
+
+  const reset = () => { setTitle(""); setEmoji("📁"); setReason(""); setColorIdx(0); setOpen(false); };
+  const handleCreate = async () => {
+    if (!title.trim()) return;
+    const c = PROJECT_COLORS[colorIdx];
+    await onCreate({ title: title.trim(), emoji, accent: c.accent, bg: c.bg, reason });
+    reset();
+  };
+
+  if (!open) {
+    return (
+      <div
+        onClick={() => { setOpen(true); setTimeout(() => titleRef.current?.focus(), 80); }}
+        style={{ marginTop: 14, background: "#fff", borderRadius: 14, border: "1px dashed #e5e7eb", padding: "16px 14px", cursor: "pointer", textAlign: "center" }}
+        onMouseEnter={e => e.currentTarget.style.borderColor = "#6366f1"}
+        onMouseLeave={e => e.currentTarget.style.borderColor = "#e5e7eb"}
+      >
+        <span style={{ fontSize: 13, color: "#9ca3af" }}>+ 添加新项目</span>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ marginTop: 14, background: "#fff", borderRadius: 14, border: "1px solid #e5e7eb", overflow: "hidden", boxShadow: "0 1px 6px rgba(0,0,0,0.05)" }}>
+      <div style={{ padding: "14px 14px 10px", borderLeft: `3px solid ${PROJECT_COLORS[colorIdx].accent}`, background: PROJECT_COLORS[colorIdx].bg }}>
+        <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+          <input value={emoji} onChange={e => setEmoji(e.target.value)}
+            style={{ width: 36, fontSize: 16, textAlign: "center", border: "1px solid #e5e7eb", borderRadius: 6, padding: "3px", fontFamily: "inherit", background: "#fff" }} />
+          <input ref={titleRef} value={title} onChange={e => setTitle(e.target.value)} placeholder="项目名称"
+            onKeyDown={e => { if (e.key === "Enter") handleCreate(); if (e.key === "Escape") reset(); }}
+            style={{ flex: 1, fontSize: 13, fontWeight: 600, border: "1px solid #e5e7eb", borderRadius: 6, padding: "3px 8px", fontFamily: "inherit", background: "#fff", color: "#1f2937" }} />
+        </div>
+        <textarea value={reason} onChange={e => setReason(e.target.value)} placeholder="为什么做这个项目？（可选）" rows={2}
+          style={{ width: "100%", fontSize: 11.5, border: "1px solid #e5e7eb", borderRadius: 6, padding: "5px 8px", fontFamily: "inherit", color: "#6b7280", resize: "none", marginBottom: 8, boxSizing: "border-box" }} />
+        <div style={{ display: "flex", gap: 4, marginBottom: 10 }}>
+          {PROJECT_COLORS.map((c, i) => (
+            <span key={i} onClick={() => setColorIdx(i)}
+              style={{ width: 20, height: 20, borderRadius: 99, background: c.accent, cursor: "pointer", border: i === colorIdx ? "2px solid #1f2937" : "2px solid transparent", boxSizing: "border-box" }} />
+          ))}
+        </div>
+        <div style={{ display: "flex", gap: 6 }}>
+          <button onClick={handleCreate} style={{ fontSize: 11, padding: "4px 12px", borderRadius: 6, border: "none", background: PROJECT_COLORS[colorIdx].accent, color: "#fff", cursor: "pointer", fontWeight: 600 }}>创建项目</button>
+          <button onClick={reset} style={{ fontSize: 11, padding: "4px 10px", borderRadius: 6, border: "1px solid #e5e7eb", background: "#fff", color: "#9ca3af", cursor: "pointer" }}>取消</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Habits Bar (editable) ───────────────────────────────────────────
 
 function HabitsBar({ habits, onSave }) {
@@ -604,32 +673,11 @@ function WeekView({
         {unscheduled.length === 0 && (
           <p style={{ fontSize: 12, color: "#9ca3af", textAlign: "center", padding: "20px 14px" }}>所有任务都已排入本周 ✨</p>
         )}
-        {(() => {
-          const groups = [];
-          const seen = new Map();
-          for (const t of unscheduled) {
-            const key = t.projectId || "__none__";
-            if (!seen.has(key)) {
-              seen.set(key, groups.length);
-              groups.push({ key, projectTitle: t.projectTitle || "无项目", projectEmoji: t.projectEmoji || "", projectAccent: t.projectAccent || "#9ca3af", projectBg: t.projectBg || "#f9fafb", tasks: [] });
-            }
-            groups[seen.get(key)].tasks.push(t);
-          }
-          return groups.map(g => (
-            <div key={g.key}>
-              <div style={{ padding: "6px 14px", background: g.projectBg, borderTop: "1px solid #f3f4f6", display: "flex", alignItems: "center", gap: 6 }}>
-                {g.projectEmoji && <span style={{ fontSize: 13 }}>{g.projectEmoji}</span>}
-                <span style={{ fontSize: 11.5, fontWeight: 700, color: g.projectAccent }}>{g.projectTitle}</span>
-                <span style={{ fontSize: 11, color: "#9ca3af", marginLeft: "auto" }}>{g.tasks.length} 项</span>
-              </div>
-              {g.tasks.map(t => (
-                <UnscheduledRow key={t.id} task={t} onComplete={onComplete}
-                  onDragStart={() => setDragging(t.id)}
-                  onTap={() => setPicking(t.id)} />
-              ))}
-            </div>
-          ));
-        })()}
+        {unscheduled.map(t => (
+          <UnscheduledRow key={t.id} task={t} onComplete={onComplete}
+            onDragStart={() => setDragging(t.id)}
+            onTap={() => setPicking(t.id)} />
+        ))}
       </div>
     </div>
   );
@@ -862,6 +910,13 @@ export default function App() {
     setProjects(prev => prev.map(p => p.id === id ? { ...p, title, emoji, reason } : p));
   }, []);
 
+  const handleCreateProject = useCallback(async ({ title, emoji, accent, bg, reason }) => {
+    const res = await api.createProject({ title, emoji, accent, bg, reason });
+    if (res.ok && res.project) {
+      setProjects(prev => [...prev, { ...res.project, tasks: [] }]);
+    }
+  }, []);
+
   const handleDeleteTask = useCallback(async (id) => {
     await api.deleteTask(id);
     setProjects(prev => prev.map(p => ({
@@ -936,9 +991,12 @@ export default function App() {
 
         {/* Board */}
         {activeTab === "board" && (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, alignItems: "start" }}>
-            <div>{leftProjects.map(p => <ProjectCard key={p.id} project={p} onComplete={handleComplete} onUncomplete={handleUncomplete} onAddTask={handleAddTask} onUpdateTask={handleUpdateTask} onDeleteTask={handleDeleteTask} onUpdateProject={handleUpdateProject} />)}</div>
-            <div>{rightProjects.map(p => <ProjectCard key={p.id} project={p} onComplete={handleComplete} onUncomplete={handleUncomplete} onAddTask={handleAddTask} onUpdateTask={handleUpdateTask} onDeleteTask={handleDeleteTask} onUpdateProject={handleUpdateProject} />)}</div>
+          <div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, alignItems: "start" }}>
+              <div>{leftProjects.map(p => <ProjectCard key={p.id} project={p} onComplete={handleComplete} onUncomplete={handleUncomplete} onAddTask={handleAddTask} onUpdateTask={handleUpdateTask} onDeleteTask={handleDeleteTask} onUpdateProject={handleUpdateProject} />)}</div>
+              <div>{rightProjects.map(p => <ProjectCard key={p.id} project={p} onComplete={handleComplete} onUncomplete={handleUncomplete} onAddTask={handleAddTask} onUpdateTask={handleUpdateTask} onDeleteTask={handleDeleteTask} onUpdateProject={handleUpdateProject} />)}</div>
+            </div>
+            <AddProjectCard onCreate={handleCreateProject} />
           </div>
         )}
 
