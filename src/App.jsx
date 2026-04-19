@@ -602,22 +602,10 @@ function WeekView({
     };
   })();
 
-  // On Sunday: compute last Saturday for the "yesterday" section
-  const yesterdayDay = (() => {
-    if (!isSunday) return null;
-    const d = new Date(today);
-    d.setDate(today.getDate() - 1);
-    return {
-      label: "周六",
-      date: d,
-      dateStr: `${d.getMonth() + 1}/${d.getDate()}`,
-      isToday: false,
-      key: `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`,
-    };
-  })();
-
   // Days available in the picker: this week + tomorrow if Saturday
   const pickerDays = tomorrowDay ? [...weekDates, tomorrowDay] : weekDates;
+  // On Saturday: also show next Sunday in the week grid
+  const gridDays = tomorrowDay ? [...weekDates, tomorrowDay] : weekDates;
 
   const schedulableTasks = allTasksFlat.filter(t => !t.calendarOnly);
   const activeTasks = schedulableTasks.filter(t => !completedIds.includes(t.id));
@@ -653,32 +641,8 @@ function WeekView({
 
       <HabitsBar habits={weeklyHabits} onSave={onSaveHabits} />
 
-      {/* Sunday: show yesterday (Saturday from last week) */}
-      {yesterdayDay && (() => {
-        const yTasks = (calendarMap[yesterdayDay.key] || []).map(taskById).filter(Boolean);
-        return yTasks.length > 0 ? (
-          <div style={{ background: "#fffbeb", borderRadius: 10, border: "1.5px solid #f59e0b", padding: "10px 14px", marginBottom: 12 }}>
-            <p style={{ fontSize: 12, fontWeight: 600, color: "#f59e0b", marginBottom: 8 }}>昨天 · {yesterdayDay.label} {yesterdayDay.dateStr}  <span style={{ fontWeight: 400, fontSize: 11 }}>点击切换完成状态</span></p>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-              {yTasks.map(t => {
-                const isFullyDone = completedIds.includes(t.id);
-                const isDayDone = (dayDoneMap[yesterdayDay.key] || []).includes(t.id);
-                const showDone = isFullyDone || isDayDone;
-                return (
-                  <div key={t.id}
-                    onClick={() => !isFullyDone && onToggleDayDone(yesterdayDay.key, t.id)}
-                    style={{ fontSize: 12, padding: "5px 10px", borderRadius: 6, borderLeft: "2px solid " + (showDone ? "#d1d5db" : (t.projectAccent || "#6366f1")), background: showDone ? "#f3f4f6" : (t.projectBg || "#fff"), color: showDone ? "#9ca3af" : "#374151", textDecoration: showDone ? "line-through" : "none", opacity: showDone ? 0.6 : 1, cursor: isFullyDone ? "default" : "pointer" }}>
-                    {showDone ? "✓ " : ""}{t.title}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        ) : null;
-      })()}
-
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 6, marginBottom: 16 }}>
-        {weekDates.map(day => {
+      <div style={{ display: "grid", gridTemplateColumns: `repeat(${gridDays.length}, 1fr)`, gap: 6, marginBottom: 16 }}>
+        {gridDays.map(day => {
           const dayTasks = (calendarMap[day.key] || []).map(taskById).filter(Boolean);
           return (
             <div key={day.key} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -765,7 +729,7 @@ function PeopleCell({ dayKey, people }) {
 
 // ── Past Weeks View ─────────────────────────────────────────────────
 
-function PastWeeksView({ allTasksFlat, calendarMap, dayDoneMap, completedIds, weeklyPeople, onToggleDayDone }) {
+function PastWeeksView({ allTasksFlat, calendarMap, dayDoneMap, completedIds, weeklyPeople, onToggleDayDone, onComplete, onRemoveFromDay }) {
   // Find all day_keys that have calendar data
   const allDayKeys = Object.keys(calendarMap).filter(k => (calendarMap[k] || []).length > 0);
 
@@ -859,8 +823,11 @@ function PastWeeksView({ allTasksFlat, calendarMap, dayDoneMap, completedIds, we
                             textDecoration: isDone ? "line-through" : "none",
                             opacity: isDone ? 0.6 : 1,
                             cursor: isFullyDone ? "default" : "pointer",
+                            display: "flex", alignItems: "center", justifyContent: "space-between", gap: 2,
                           }}>
-                            {isDone ? "✓ " : ""}{t.title}
+                            <span style={{ flex: 1 }}>{isDone ? "✓ " : ""}{t.title}</span>
+                            {!isDone && <span onClick={e => { e.stopPropagation(); onComplete(t.id); }} style={{ fontSize: 9, color: "#22c55e", cursor: "pointer", flexShrink: 0 }} title="完成">✓</span>}
+                            {!isFullyDone && <span onClick={e => { e.stopPropagation(); onRemoveFromDay(day.key, t.id); }} style={{ fontSize: 9, color: "#d1d5db", cursor: "pointer", flexShrink: 0 }} title="移除">✕</span>}
                           </div>
                         );
                       })}
@@ -1090,6 +1057,8 @@ export default function App() {
             completedIds={completedIds}
             weeklyPeople={weeklyPeople}
             onToggleDayDone={handleToggleDayDone}
+            onComplete={handleComplete}
+            onRemoveFromDay={handleRemoveFromDay}
           />
         )}
       </div>
