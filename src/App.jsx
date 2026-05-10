@@ -674,6 +674,7 @@ function WeekView({
                   })}
                 </div>
               </div>
+              <NotesCell dayKey={day.key} notes={dailyNotes[day.key] || ""} />
               <PeopleCell dayKey={day.key} people={weeklyPeople[day.key] || ""} />
             </div>
           );
@@ -702,6 +703,27 @@ function WeekView({
             onTap={() => setPicking(t.id)} />
         ))}
       </div>
+    </div>
+  );
+}
+
+function NotesCell({ dayKey, notes }) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(notes);
+  useEffect(() => { setValue(notes); }, [notes]);
+  const save = async () => { setEditing(false); await api.setDailyNotes(dayKey, value); };
+  if (editing) {
+    return (
+      <div style={{ background: "#fff", borderRadius: 10, border: "1px solid #f59e0b", padding: "7px 6px", height: 79 }}>
+        <textarea autoFocus value={value} onChange={e => setValue(e.target.value)} onBlur={save} onKeyDown={e => e.key === "Enter" && save()}
+          style={{ width: "100%", height: "100%", border: "none", outline: "none", fontSize: 10, color: "#374151", resize: "none", fontFamily: "inherit", lineHeight: 1.4 }} />
+      </div>
+    );
+  }
+  return (
+    <div onClick={() => setEditing(true)} style={{ background: "#fff", borderRadius: 10, border: "1px solid #f0f0f0", padding: "7px 6px", height: 79, cursor: "text" }}>
+      <p style={{ fontSize: 9.5, color: "#9ca3af", marginBottom: 3 }}>📌</p>
+      <p style={{ fontSize: 10, color: value ? "#374151" : "#e5e7eb", lineHeight: 1.4, whiteSpace: "pre-wrap" }}>{value || "—"}</p>
     </div>
   );
 }
@@ -865,6 +887,7 @@ export default function App() {
   const [calendarMap, setCalendarMap] = useState({});
   const [dayDoneMap, setDayDoneMap] = useState({});
   const [weeklyPeople, setWeeklyPeople] = useState({});
+  const [dailyNotes, setDailyNotes] = useState({});
   const [weeklyHabits, setWeeklyHabits] = useState(DEFAULT_HABITS);
 
   useEffect(() => {
@@ -876,6 +899,7 @@ export default function App() {
         setCalendarMap(state.calendarMap || {});
         setDayDoneMap(state.dayDoneMap || {});
         setWeeklyPeople(state.weeklyPeople || {});
+        setDailyNotes(state.dailyNotes || {});
         setWeeklyHabits(habits || DEFAULT_HABITS);
         setProjects(projs || []);
         setLoading(false);

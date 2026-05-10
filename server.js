@@ -24,6 +24,16 @@ app.get('/api/projects', async (req, res) => {
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+app.post('/api/projects', async (req, res) => {
+  const { title, emoji, accent, bg, reason } = req.body;
+  if (!title || !title.trim()) return res.status(400).json({ error: 'title is required' });
+  const id = 'proj_' + crypto.randomBytes(6).toString('hex');
+  try {
+    const project = await db.createProject({ id, title: title.trim(), emoji: emoji || '', accent: accent || '#6366f1', bg: bg || '#eef2ff', reason: reason || '' });
+    res.json({ ok: true, project });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 app.put('/api/projects/:id', async (req, res) => {
   const { title, emoji, reason } = req.body;
   if (!title || !title.trim()) return res.status(400).json({ error: 'title is required' });
@@ -93,6 +103,11 @@ app.post('/api/day-done/toggle', async (req, res) => {
 
 app.put('/api/weekly-people/:dayKey', async (req, res) => {
   try { await db.setWeeklyPeople(req.params.dayKey, req.body.people || ''); res.json({ ok: true }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.put('/api/daily-notes/:dayKey', async (req, res) => {
+  try { await db.setDailyNotes(req.params.dayKey, req.body.notes || ''); res.json({ ok: true }); }
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 

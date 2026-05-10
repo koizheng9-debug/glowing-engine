@@ -7,6 +7,15 @@ export async function fetchState() {
   return res.json();
 }
 
+export async function createProject({ title, emoji, accent, bg, reason }) {
+  const res = await fetch('/api/projects', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title, emoji, accent, bg, reason }),
+  });
+  return res.json();
+}
+
 export async function updateProject(id, { title, emoji, reason }) {
   const res = await fetch(`/api/projects/${id}`, {
     method: 'PUT',
@@ -89,6 +98,14 @@ export async function setWeeklyPeople(dayKey, people) {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ people }),
+  });
+}
+
+export async function setDailyNotes(dayKey, notes) {
+  await fetch(`/api/daily-notes/${dayKey}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ notes }),
   });
 }
 

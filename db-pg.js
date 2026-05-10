@@ -33,6 +33,10 @@ async function init() {
       day_key TEXT PRIMARY KEY,
       people TEXT NOT NULL DEFAULT ''
     );
+    CREATE TABLE IF NOT EXISTS daily_notes (
+      day_key TEXT PRIMARY KEY,
+      notes TEXT NOT NULL DEFAULT ''
+    );
     CREATE TABLE IF NOT EXISTS projects (
       id TEXT PRIMARY KEY,
       title TEXT NOT NULL,
@@ -79,7 +83,9 @@ async function getState() {
   for (const row of dayDoneRows) (dayDoneMap[row.day_key] ||= []).push(row.task_id);
   const { rows: wpRows } = await q('SELECT day_key, people FROM weekly_people');
   const weeklyPeople = Object.fromEntries(wpRows.map(r => [r.day_key, r.people]));
-  return { completedIds, completedDates, inProgressIds, calendarMap, dayDoneMap, weeklyPeople };
+  const { rows: dnRows } = await q('SELECT day_key, notes FROM daily_notes');
+  const dailyNotes = Object.fromEntries(dnRows.map(r => [r.day_key, r.notes]));
+  return { completedIds, completedDates, inProgressIds, calendarMap, dayDoneMap, weeklyPeople, dailyNotes };
 }
 
 async function getProjects() {
@@ -143,6 +149,13 @@ async function setWeeklyPeople(dayKey, people) {
   );
 }
 
+async function setDailyNotes(dayKey, notes) {
+  await q(
+    'INSERT INTO daily_notes (day_key, notes) VALUES ($1, $2) ON CONFLICT (day_key) DO UPDATE SET notes = $2',
+    [dayKey, notes]
+  );
+}
+
 async function createTask({ id, projectId, title, deadline, note, time, priority, steps, calendarOnly }) {
   const createdAt = new Date().toISOString();
   await q(
@@ -155,6 +168,16 @@ async function createTask({ id, projectId, title, deadline, note, time, priority
 async function updateTask(id, { title, deadline, note, steps }) {
   await q('UPDATE tasks SET title = $1, deadline = $2, note = $3, steps = $4 WHERE id = $5',
     [title, deadline || '', note || '', JSON.stringify(steps || []), id]);
+}
+
+async function createProject({ id, title, emoji, accent, bg, reason }) {
+  const { rows } = await q('SELECT COALESCE(MAX(sort_order), 0) + 1 AS next FROM projects');
+  const sortOrder = rows[0].next;
+  await q(
+    'INSERT INTO projects (id, title, emoji, accent, bg, reason, sort_order) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+    [id, title, emoji || '', accent || '#6366f1', bg || '#eef2ff', reason || '', sortOrder]
+  );
+  return { id, title, emoji: emoji || '', accent: accent || '#6366f1', bg: bg || '#eef2ff', reason: reason || '', sort_order: sortOrder };
 }
 
 async function updateProject(id, { title, emoji, reason }) {
@@ -182,4 +205,4 @@ async function setHabits(habits) {
   );
 }
 
-module.exports = { init, getState, getProjects, completeTask, uncompleteTask, toggleInProgress, assignToDay, removeFromDay, toggleDayDone, setWeeklyPeople, createTask, updateTask, deleteTask, updateProject, getHabits, setHabits };
+module.exports = { init, getState, getProjects, completeTask, uncompleteTask, toggleInProgress, assignToDay, removeFromDay, toggleDayDone, setWeeklyPeople, setDailyNotes, createTask, updateTask, deleteTask, createProject, updateProject, getHabits, setHabits };
