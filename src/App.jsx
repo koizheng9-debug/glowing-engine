@@ -576,7 +576,7 @@ function UnscheduledRow({ task: t, onComplete, onDragStart, onTap }) {
 
 function WeekView({
   allTasksFlat, completedIds, onComplete,
-  calendarMap, dayDoneMap, weeklyPeople,
+  calendarMap, dayDoneMap, weeklyPeople, dailyNotes,
   onAssignToDay, onRemoveFromDay, onToggleDayDone,
   weeklyHabits, onSaveHabits,
 }) {
@@ -1064,6 +1064,7 @@ export default function App() {
             calendarMap={calendarMap}
             dayDoneMap={dayDoneMap}
             weeklyPeople={weeklyPeople}
+            dailyNotes={dailyNotes}
             onAssignToDay={handleAssignToDay}
             onRemoveFromDay={handleRemoveFromDay}
             onToggleDayDone={handleToggleDayDone}
