@@ -44,7 +44,8 @@ async function init() {
       accent TEXT NOT NULL DEFAULT '#6366f1',
       bg TEXT NOT NULL DEFAULT '#eef2ff',
       reason TEXT NOT NULL DEFAULT '',
-      sort_order INTEGER NOT NULL DEFAULT 0
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      board_column INTEGER NOT NULL DEFAULT 0
     );
     CREATE TABLE IF NOT EXISTS settings (
       key TEXT PRIMARY KEY,
@@ -63,6 +64,15 @@ async function init() {
       created_at TEXT NOT NULL DEFAULT ''
     );
   `);
+  // Migration: add board_column if missing (for existing databases)
+  try {
+    await q("ALTER TABLE projects ADD COLUMN board_column INTEGER NOT NULL DEFAULT 0");
+    // Distribute existing projects across 3 columns
+    const { rows: projs } = await q('SELECT id, sort_order FROM projects ORDER BY sort_order');
+    for (let i = 0; i < projs.length; i++) {
+      await q('UPDATE projects SET board_column = $1, sort_order = $2 WHERE id = $3', [i % 3, Math.floor(i / 3), projs[i].id]);
+    }
+  } catch(e) { /* column already exists */ }
 }
 
 // ── Query helpers ───────────────────────────────────────────────────
@@ -171,13 +181,18 @@ async function updateTask(id, { title, deadline, note, steps }) {
 }
 
 async function createProject({ id, title, emoji, accent, bg, reason }) {
-  const { rows } = await q('SELECT COALESCE(MAX(sort_order), 0) + 1 AS next FROM projects');
+  // Find the column with fewest projects, put new project at the bottom
+  const { rows: counts } = await q('SELECT board_column, COUNT(*) as cnt FROM projects GROUP BY board_column');
+  const colCounts = [0, 0, 0];
+  counts.forEach(r => { if (r.board_column >= 0 && r.board_column <= 2) colCounts[r.board_column] = parseInt(r.cnt); });
+  const col = colCounts.indexOf(Math.min(...colCounts));
+  const { rows } = await q('SELECT COALESCE(MAX(sort_order), -1) + 1 AS next FROM projects WHERE board_column = $1', [col]);
   const sortOrder = rows[0].next;
   await q(
-    'INSERT INTO projects (id, title, emoji, accent, bg, reason, sort_order) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-    [id, title, emoji || '', accent || '#6366f1', bg || '#eef2ff', reason || '', sortOrder]
+    'INSERT INTO projects (id, title, emoji, accent, bg, reason, sort_order, board_column) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+    [id, title, emoji || '', accent || '#6366f1', bg || '#eef2ff', reason || '', sortOrder, col]
   );
-  return { id, title, emoji: emoji || '', accent: accent || '#6366f1', bg: bg || '#eef2ff', reason: reason || '', sort_order: sortOrder };
+  return { id, title, emoji: emoji || '', accent: accent || '#6366f1', bg: bg || '#eef2ff', reason: reason || '', sort_order: sortOrder, board_column: col };
 }
 
 async function updateProject(id, { title, emoji, reason }) {
@@ -211,4 +226,16 @@ async function reorderProjects(orderedIds) {
   }
 }
 
-module.exports = { init, getState, getProjects, completeTask, uncompleteTask, toggleInProgress, assignToDay, removeFromDay, toggleDayDone, setWeeklyPeople, setDailyNotes, createTask, updateTask, deleteTask, createProject, updateProject, getHabits, setHabits, reorderProjects };
+async function moveProject(projectId, targetColumn, targetIndex) {
+  await q('UPDATE projects SET board_column = $1, sort_order = $2 WHERE id = $3', [targetColumn, targetIndex, projectId]);
+  // Re-index all projects in the target column to avoid gaps
+  const { rows: projs } = await q('SELECT id FROM projects WHERE board_column = $1 AND id != $2 ORDER BY sort_order', [targetColumn, projectId]);
+  let idx = 0;
+  for (const p of projs) {
+    if (idx === targetIndex) idx++;
+    await q('UPDATE projects SET sort_order = $1 WHERE id = $2', [idx, p.id]);
+    idx++;
+  }
+}
+
+module.exports = { init, getState, getProjects, completeTask, uncompleteTask, toggleInProgress, assignToDay, removeFromDay, toggleDayDone, setWeeklyPeople, setDailyNotes, createTask, updateTask, deleteTask, createProject, updateProject, getHabits, setHabits, reorderProjects, moveProject };

@@ -870,51 +870,66 @@ function PastWeeksView({ allTasksFlat, calendarMap, dayDoneMap, completedIds, we
 
 // ── Board View with drag-to-reorder ─────────────────────────────────
 
-function BoardView({ projects, onComplete, onUncomplete, onAddTask, onUpdateTask, onDeleteTask, onUpdateProject, onCreateProject, onReorder }) {
+function BoardView({ projects, onComplete, onUncomplete, onAddTask, onUpdateTask, onDeleteTask, onUpdateProject, onCreateProject, onMoveProject }) {
   const [draggingId, setDraggingId] = useState(null);
-  const [dragOverId, setDragOverId] = useState(null);
+  const [dropTarget, setDropTarget] = useState(null); // { col, index }
   const longPressTimer = useRef(null);
   const touchStartPos = useRef(null);
 
+  // Split projects into 3 columns based on board_column
+  const columns = [[], [], []];
+  projects.forEach(p => {
+    const col = (p.board_column != null && p.board_column >= 0 && p.board_column <= 2) ? p.board_column : 0;
+    columns[col].push(p);
+  });
+  columns.forEach(col => col.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)));
+
+  const executeDrop = (targetCol, targetIndex) => {
+    if (!draggingId) return;
+    onMoveProject(draggingId, targetCol, targetIndex);
+    setDraggingId(null);
+    setDropTarget(null);
+  };
+
+  // Desktop drag handlers
   const handleDragStart = (e, id) => {
     setDraggingId(id);
     e.dataTransfer.effectAllowed = 'move';
   };
-  const handleDragOver = (e, id) => {
+  const handleDragEnd = () => { setDraggingId(null); setDropTarget(null); };
+
+  const handleCardDragOver = (e, col, index) => {
     e.preventDefault();
-    if (id !== draggingId) setDragOverId(id);
+    setDropTarget({ col, index });
   };
-  const handleDrop = (e, targetId) => {
+  const handleCardDrop = (e, col, index) => {
     e.preventDefault();
-    if (!draggingId || draggingId === targetId) { setDraggingId(null); setDragOverId(null); return; }
-    const ids = projects.map(p => p.id);
-    const fromIdx = ids.indexOf(draggingId);
-    const toIdx = ids.indexOf(targetId);
-    if (fromIdx === -1 || toIdx === -1) { setDraggingId(null); setDragOverId(null); return; }
-    ids.splice(fromIdx, 1);
-    ids.splice(toIdx, 0, draggingId);
-    onReorder(ids);
-    setDraggingId(null);
-    setDragOverId(null);
+    executeDrop(col, index);
   };
-  const handleDragEnd = () => { setDraggingId(null); setDragOverId(null); };
+  // Drop on empty area at bottom of column
+  const handleColDragOver = (e, col) => {
+    e.preventDefault();
+    setDropTarget({ col, index: columns[col].length });
+  };
+  const handleColDrop = (e, col) => {
+    e.preventDefault();
+    executeDrop(col, columns[col].length);
+  };
 
   // Touch long-press for mobile
   const handleTouchStart = (e, id) => {
     touchStartPos.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
     longPressTimer.current = setTimeout(() => {
       setDraggingId(id);
-      // Haptic feedback if available
       if (navigator.vibrate) navigator.vibrate(30);
     }, 500);
   };
-  const handleTouchMove = (e, id) => {
+  const handleTouchMove = (e) => {
     if (!draggingId) {
-      // Cancel long press if moved too much
       if (touchStartPos.current) {
         const dx = Math.abs(e.touches[0].clientX - touchStartPos.current.x);
         const dy = Math.abs(e.touches[0].clientY - touchStartPos.current.y);
-        if (dx > 10 || dy > 10) { clearTimeout(longPressTimer.current); }
+        if (dx > 10 || dy > 10) clearTimeout(longPressTimer.current);
       }
       return;
     }
@@ -922,58 +937,60 @@ function BoardView({ projects, onComplete, onUncomplete, onAddTask, onUpdateTask
     const touch = e.touches[0];
     const elements = document.elementsFromPoint(touch.clientX, touch.clientY);
     for (const el of elements) {
-      const projId = el.getAttribute('data-project-id');
-      if (projId && projId !== draggingId) { setDragOverId(projId); break; }
-    }
-  };
-  const handleTouchEnd = (e, id) => {
-    clearTimeout(longPressTimer.current);
-    if (draggingId && dragOverId) {
-      const ids = projects.map(p => p.id);
-      const fromIdx = ids.indexOf(draggingId);
-      const toIdx = ids.indexOf(dragOverId);
-      if (fromIdx !== -1 && toIdx !== -1) {
-        ids.splice(fromIdx, 1);
-        ids.splice(toIdx, 0, draggingId);
-        onReorder(ids);
+      const colAttr = el.getAttribute('data-board-col');
+      const idxAttr = el.getAttribute('data-board-idx');
+      if (colAttr != null) {
+        const col = parseInt(colAttr);
+        const idx = idxAttr != null ? parseInt(idxAttr) : columns[col].length;
+        setDropTarget({ col, index: idx });
+        break;
       }
     }
+  };
+  const handleTouchEnd = () => {
+    clearTimeout(longPressTimer.current);
+    if (draggingId && dropTarget) {
+      executeDrop(dropTarget.col, dropTarget.index);
+    }
     setDraggingId(null);
-    setDragOverId(null);
+    setDropTarget(null);
   };
 
-  const leftProjects  = projects.filter((_, i) => i < 4);
-  const rightProjects = projects.filter((_, i) => i >= 4);
-
-  const renderCard = (p) => (
-    <div
-      key={p.id}
-      data-project-id={p.id}
-      draggable={true}
-      onDragStart={e => handleDragStart(e, p.id)}
-      onDragOver={e => handleDragOver(e, p.id)}
-      onDrop={e => handleDrop(e, p.id)}
-      onDragEnd={handleDragEnd}
-      onTouchStart={e => handleTouchStart(e, p.id)}
-      onTouchMove={e => handleTouchMove(e, p.id)}
-      onTouchEnd={e => handleTouchEnd(e, p.id)}
-      style={{
-        opacity: draggingId === p.id ? 0.4 : 1,
-        borderTop: dragOverId === p.id ? '3px solid #6366f1' : '3px solid transparent',
-        transition: 'opacity 0.15s',
-      }}
-    >
-      <ProjectCard
-        project={p}
-        onComplete={onComplete}
-        onUncomplete={onUncomplete}
-        onAddTask={onAddTask}
-        onUpdateTask={onUpdateTask}
-        onDeleteTask={onDeleteTask}
-        onUpdateProject={onUpdateProject}
-      />
-    </div>
-  );
+  const renderCard = (p, col, index) => {
+    const isBeingDragged = draggingId === p.id;
+    const isDropHere = dropTarget && dropTarget.col === col && dropTarget.index === index && draggingId !== p.id;
+    return (
+      <div
+        key={p.id}
+        data-project-id={p.id}
+        data-board-col={col}
+        data-board-idx={index}
+        draggable={true}
+        onDragStart={e => handleDragStart(e, p.id)}
+        onDragOver={e => handleCardDragOver(e, col, index)}
+        onDrop={e => handleCardDrop(e, col, index)}
+        onDragEnd={handleDragEnd}
+        onTouchStart={e => handleTouchStart(e, p.id)}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        style={{
+          opacity: isBeingDragged ? 0.4 : 1,
+          borderTop: isDropHere ? '3px solid #6366f1' : '3px solid transparent',
+          transition: 'opacity 0.15s',
+        }}
+      >
+        <ProjectCard
+          project={p}
+          onComplete={onComplete}
+          onUncomplete={onUncomplete}
+          onAddTask={onAddTask}
+          onUpdateTask={onUpdateTask}
+          onDeleteTask={onDeleteTask}
+          onUpdateProject={onUpdateProject}
+        />
+      </div>
+    );
+  };
 
   return (
     <div>
@@ -982,9 +999,24 @@ function BoardView({ projects, onComplete, onUncomplete, onAddTask, onUpdateTask
           拖动到目标位置松手即可排序
         </div>
       )}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, alignItems: "start" }}>
-        <div>{leftProjects.map(renderCard)}</div>
-        <div>{rightProjects.map(renderCard)}</div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, alignItems: "start" }}>
+        {columns.map((colProjects, colIdx) => (
+          <div
+            key={colIdx}
+            data-board-col={colIdx}
+            onDragOver={e => handleColDragOver(e, colIdx)}
+            onDrop={e => handleColDrop(e, colIdx)}
+            style={{
+              minHeight: 100,
+              borderRadius: 10,
+              border: (dropTarget && dropTarget.col === colIdx && dropTarget.index === colProjects.length) ? '2px dashed #6366f1' : '2px dashed transparent',
+              padding: 2,
+              transition: 'border-color 0.15s',
+            }}
+          >
+            {colProjects.map((p, idx) => renderCard(p, colIdx, idx))}
+          </div>
+        ))}
       </div>
       <AddProjectCard onCreate={onCreateProject} />
     </div>
@@ -1102,6 +1134,26 @@ export default function App() {
     api.reorderProjects(orderedIds);
   }, []);
 
+  const handleMoveProject = useCallback(async (projectId, targetCol, targetIndex) => {
+    setProjects(prev => {
+      const updated = prev.map(p => {
+        if (p.id === projectId) return { ...p, board_column: targetCol, sort_order: targetIndex };
+        return p;
+      });
+      // Re-index other projects in the target column
+      const inCol = updated.filter(p => p.board_column === targetCol && p.id !== projectId)
+        .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+      let idx = 0;
+      for (const p of inCol) {
+        if (idx === targetIndex) idx++;
+        p.sort_order = idx;
+        idx++;
+      }
+      return updated;
+    });
+    api.moveProject(projectId, targetCol, targetIndex);
+  }, []);
+
   const handleDeleteTask = useCallback(async (id) => {
     await api.deleteTask(id);
     setProjects(prev => prev.map(p => ({
@@ -1185,7 +1237,7 @@ export default function App() {
             onDeleteTask={handleDeleteTask}
             onUpdateProject={handleUpdateProject}
             onCreateProject={handleCreateProject}
-            onReorder={handleReorderProjects}
+            onMoveProject={handleMoveProject}
           />
         )}
 

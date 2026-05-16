@@ -33,6 +33,14 @@ export async function reorderProjects(orderedIds) {
   });
 }
 
+export async function moveProject(projectId, column, index) {
+  await fetch('/api/projects/move', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ projectId, column, index }),
+  });
+}
+
 export async function fetchProjects() {
   const res = await fetch('/api/projects');
   if (!res.ok) throw new Error('Failed to load projects');

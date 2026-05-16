@@ -54,6 +54,13 @@ app.post('/api/projects/reorder', async (req, res) => {
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+app.post('/api/projects/move', async (req, res) => {
+  const { projectId, column, index } = req.body;
+  if (!projectId || column == null || index == null) return res.status(400).json({ error: 'projectId, column, index required' });
+  try { await db.moveProject(projectId, column, index); res.json({ ok: true }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 app.post('/api/tasks', async (req, res) => {
   const { projectId, title, deadline, note, time, priority, steps, calendarOnly } = req.body;
   if (!projectId || !title || !title.trim()) {

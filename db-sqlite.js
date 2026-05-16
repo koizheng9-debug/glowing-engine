@@ -34,7 +34,8 @@ db.exec(`
     accent TEXT NOT NULL DEFAULT '#6366f1',
     bg TEXT NOT NULL DEFAULT '#eef2ff',
     reason TEXT NOT NULL DEFAULT '',
-    sort_order INTEGER NOT NULL DEFAULT 0
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    board_column INTEGER NOT NULL DEFAULT 0
   );
   CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
@@ -53,6 +54,19 @@ db.exec(`
     created_at TEXT NOT NULL DEFAULT ''
   );
 `);
+
+// ── Migration: add board_column if missing ─────────────────────────
+try {
+  const cols = db.prepare("PRAGMA table_info(projects)").all();
+  if (!cols.find(c => c.name === 'board_column')) {
+    db.exec("ALTER TABLE projects ADD COLUMN board_column INTEGER NOT NULL DEFAULT 0");
+    // Distribute existing projects across 3 columns
+    const projs = db.prepare("SELECT id, sort_order FROM projects ORDER BY sort_order").all();
+    projs.forEach((p, i) => {
+      db.prepare("UPDATE projects SET board_column = ?, sort_order = ? WHERE id = ?").run(i % 3, Math.floor(i / 3), p.id);
+    });
+  }
+} catch(e) { /* column already exists */ }
 
 // ── Async-wrapped query helpers ─────────────────────────────────────
 
@@ -142,11 +156,16 @@ async function updateTask(id, { title, deadline, note, steps }) {
 }
 
 async function createProject({ id, title, emoji, accent, bg, reason }) {
-  const row = db.prepare('SELECT COALESCE(MAX(sort_order), 0) + 1 AS next FROM projects').get();
+  // Find the column with fewest projects, put new project at the bottom
+  const counts = db.prepare('SELECT board_column, COUNT(*) as cnt FROM projects GROUP BY board_column').all();
+  const colCounts = [0, 0, 0];
+  counts.forEach(r => { if (r.board_column >= 0 && r.board_column <= 2) colCounts[r.board_column] = r.cnt; });
+  const col = colCounts.indexOf(Math.min(...colCounts));
+  const row = db.prepare('SELECT COALESCE(MAX(sort_order), -1) + 1 AS next FROM projects WHERE board_column = ?').get(col);
   const sortOrder = row.next;
-  db.prepare('INSERT INTO projects (id, title, emoji, accent, bg, reason, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)')
-    .run(id, title, emoji || '', accent || '#6366f1', bg || '#eef2ff', reason || '', sortOrder);
-  return { id, title, emoji: emoji || '', accent: accent || '#6366f1', bg: bg || '#eef2ff', reason: reason || '', sort_order: sortOrder };
+  db.prepare('INSERT INTO projects (id, title, emoji, accent, bg, reason, sort_order, board_column) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+    .run(id, title, emoji || '', accent || '#6366f1', bg || '#eef2ff', reason || '', sortOrder, col);
+  return { id, title, emoji: emoji || '', accent: accent || '#6366f1', bg: bg || '#eef2ff', reason: reason || '', sort_order: sortOrder, board_column: col };
 }
 
 async function updateProject(id, { title, emoji, reason }) {
@@ -177,4 +196,18 @@ async function reorderProjects(orderedIds) {
   }
 }
 
-module.exports = { init, getState, getProjects, completeTask, uncompleteTask, toggleInProgress, assignToDay, removeFromDay, toggleDayDone, setWeeklyPeople, createTask, updateTask, deleteTask, createProject, updateProject, getHabits, setHabits, reorderProjects };
+async function moveProject(projectId, targetColumn, targetIndex) {
+  // Update the moved project's column and sort_order
+  db.prepare('UPDATE projects SET board_column = ?, sort_order = ? WHERE id = ?').run(targetColumn, targetIndex, projectId);
+  // Re-index all projects in the target column to avoid gaps
+  const projs = db.prepare('SELECT id FROM projects WHERE board_column = ? AND id != ? ORDER BY sort_order').all(targetColumn, projectId);
+  const stmt = db.prepare('UPDATE projects SET sort_order = ? WHERE id = ?');
+  let idx = 0;
+  for (const p of projs) {
+    if (idx === targetIndex) idx++; // skip the spot for moved project
+    stmt.run(idx, p.id);
+    idx++;
+  }
+}
+
+module.exports = { init, getState, getProjects, completeTask, uncompleteTask, toggleInProgress, assignToDay, removeFromDay, toggleDayDone, setWeeklyPeople, createTask, updateTask, deleteTask, createProject, updateProject, getHabits, setHabits, reorderProjects, moveProject };
