@@ -935,15 +935,29 @@ function BoardView({ projects, onComplete, onUncomplete, onAddTask, onUpdateTask
     }
     e.preventDefault();
     const touch = e.touches[0];
-    const elements = document.elementsFromPoint(touch.clientX, touch.clientY);
-    for (const el of elements) {
-      const colAttr = el.getAttribute('data-board-col');
-      const idxAttr = el.getAttribute('data-board-idx');
-      if (colAttr != null) {
-        const col = parseInt(colAttr);
-        const idx = idxAttr != null ? parseInt(idxAttr) : columns[col].length;
-        setDropTarget({ col, index: idx });
+    const tx = touch.clientX, ty = touch.clientY;
+    // Find drop target by checking bounding rects of all cards (not elementsFromPoint)
+    const allCards = document.querySelectorAll('[data-board-col][data-board-idx]');
+    let found = false;
+    for (const el of allCards) {
+      if (el.getAttribute('data-project-id') === draggingId) continue;
+      const rect = el.getBoundingClientRect();
+      if (tx >= rect.left && tx <= rect.right && ty >= rect.top && ty <= rect.bottom) {
+        setDropTarget({ col: parseInt(el.getAttribute('data-board-col')), index: parseInt(el.getAttribute('data-board-idx')) });
+        found = true;
         break;
+      }
+    }
+    // If not over any card, check which column we're over and target the bottom
+    if (!found) {
+      const colEls = document.querySelectorAll('[data-board-col]:not([data-board-idx])');
+      for (const el of colEls) {
+        const rect = el.getBoundingClientRect();
+        if (tx >= rect.left && tx <= rect.right && ty >= rect.top && ty <= rect.bottom) {
+          const col = parseInt(el.getAttribute('data-board-col'));
+          setDropTarget({ col, index: columns[col].length });
+          break;
+        }
       }
     }
   };
