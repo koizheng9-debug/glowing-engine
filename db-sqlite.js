@@ -141,6 +141,14 @@ async function updateTask(id, { title, deadline, note, steps }) {
     .run(title, deadline || '', note || '', JSON.stringify(steps || []), id);
 }
 
+async function createProject({ id, title, emoji, accent, bg, reason }) {
+  const row = db.prepare('SELECT COALESCE(MAX(sort_order), 0) + 1 AS next FROM projects').get();
+  const sortOrder = row.next;
+  db.prepare('INSERT INTO projects (id, title, emoji, accent, bg, reason, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    .run(id, title, emoji || '', accent || '#6366f1', bg || '#eef2ff', reason || '', sortOrder);
+  return { id, title, emoji: emoji || '', accent: accent || '#6366f1', bg: bg || '#eef2ff', reason: reason || '', sort_order: sortOrder };
+}
+
 async function updateProject(id, { title, emoji, reason }) {
   db.prepare('UPDATE projects SET title = ?, emoji = ?, reason = ? WHERE id = ?').run(title, emoji || '', reason || '', id);
 }
@@ -162,4 +170,11 @@ async function setHabits(habits) {
   db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('weekly_habits', ?)").run(JSON.stringify(habits));
 }
 
-module.exports = { init, getState, getProjects, completeTask, uncompleteTask, toggleInProgress, assignToDay, removeFromDay, toggleDayDone, setWeeklyPeople, createTask, updateTask, deleteTask, updateProject, getHabits, setHabits };
+async function reorderProjects(orderedIds) {
+  const stmt = db.prepare('UPDATE projects SET sort_order = ? WHERE id = ?');
+  for (let i = 0; i < orderedIds.length; i++) {
+    stmt.run(i, orderedIds[i]);
+  }
+}
+
+module.exports = { init, getState, getProjects, completeTask, uncompleteTask, toggleInProgress, assignToDay, removeFromDay, toggleDayDone, setWeeklyPeople, createTask, updateTask, deleteTask, createProject, updateProject, getHabits, setHabits, reorderProjects };

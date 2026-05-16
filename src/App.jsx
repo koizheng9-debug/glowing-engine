@@ -868,6 +868,129 @@ function PastWeeksView({ allTasksFlat, calendarMap, dayDoneMap, completedIds, we
   );
 }
 
+// ── Board View with drag-to-reorder ─────────────────────────────────
+
+function BoardView({ projects, onComplete, onUncomplete, onAddTask, onUpdateTask, onDeleteTask, onUpdateProject, onCreateProject, onReorder }) {
+  const [draggingId, setDraggingId] = useState(null);
+  const [dragOverId, setDragOverId] = useState(null);
+  const longPressTimer = useRef(null);
+  const touchStartPos = useRef(null);
+
+  const handleDragStart = (e, id) => {
+    setDraggingId(id);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+  const handleDragOver = (e, id) => {
+    e.preventDefault();
+    if (id !== draggingId) setDragOverId(id);
+  };
+  const handleDrop = (e, targetId) => {
+    e.preventDefault();
+    if (!draggingId || draggingId === targetId) { setDraggingId(null); setDragOverId(null); return; }
+    const ids = projects.map(p => p.id);
+    const fromIdx = ids.indexOf(draggingId);
+    const toIdx = ids.indexOf(targetId);
+    if (fromIdx === -1 || toIdx === -1) { setDraggingId(null); setDragOverId(null); return; }
+    ids.splice(fromIdx, 1);
+    ids.splice(toIdx, 0, draggingId);
+    onReorder(ids);
+    setDraggingId(null);
+    setDragOverId(null);
+  };
+  const handleDragEnd = () => { setDraggingId(null); setDragOverId(null); };
+
+  // Touch long-press for mobile
+  const handleTouchStart = (e, id) => {
+    touchStartPos.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    longPressTimer.current = setTimeout(() => {
+      setDraggingId(id);
+      // Haptic feedback if available
+      if (navigator.vibrate) navigator.vibrate(30);
+    }, 500);
+  };
+  const handleTouchMove = (e, id) => {
+    if (!draggingId) {
+      // Cancel long press if moved too much
+      if (touchStartPos.current) {
+        const dx = Math.abs(e.touches[0].clientX - touchStartPos.current.x);
+        const dy = Math.abs(e.touches[0].clientY - touchStartPos.current.y);
+        if (dx > 10 || dy > 10) { clearTimeout(longPressTimer.current); }
+      }
+      return;
+    }
+    e.preventDefault();
+    const touch = e.touches[0];
+    const elements = document.elementsFromPoint(touch.clientX, touch.clientY);
+    for (const el of elements) {
+      const projId = el.getAttribute('data-project-id');
+      if (projId && projId !== draggingId) { setDragOverId(projId); break; }
+    }
+  };
+  const handleTouchEnd = (e, id) => {
+    clearTimeout(longPressTimer.current);
+    if (draggingId && dragOverId) {
+      const ids = projects.map(p => p.id);
+      const fromIdx = ids.indexOf(draggingId);
+      const toIdx = ids.indexOf(dragOverId);
+      if (fromIdx !== -1 && toIdx !== -1) {
+        ids.splice(fromIdx, 1);
+        ids.splice(toIdx, 0, draggingId);
+        onReorder(ids);
+      }
+    }
+    setDraggingId(null);
+    setDragOverId(null);
+  };
+
+  const leftProjects  = projects.filter((_, i) => i < 4);
+  const rightProjects = projects.filter((_, i) => i >= 4);
+
+  const renderCard = (p) => (
+    <div
+      key={p.id}
+      data-project-id={p.id}
+      draggable={true}
+      onDragStart={e => handleDragStart(e, p.id)}
+      onDragOver={e => handleDragOver(e, p.id)}
+      onDrop={e => handleDrop(e, p.id)}
+      onDragEnd={handleDragEnd}
+      onTouchStart={e => handleTouchStart(e, p.id)}
+      onTouchMove={e => handleTouchMove(e, p.id)}
+      onTouchEnd={e => handleTouchEnd(e, p.id)}
+      style={{
+        opacity: draggingId === p.id ? 0.4 : 1,
+        borderTop: dragOverId === p.id ? '3px solid #6366f1' : '3px solid transparent',
+        transition: 'opacity 0.15s',
+      }}
+    >
+      <ProjectCard
+        project={p}
+        onComplete={onComplete}
+        onUncomplete={onUncomplete}
+        onAddTask={onAddTask}
+        onUpdateTask={onUpdateTask}
+        onDeleteTask={onDeleteTask}
+        onUpdateProject={onUpdateProject}
+      />
+    </div>
+  );
+
+  return (
+    <div>
+      {draggingId && (
+        <div style={{ textAlign: 'center', fontSize: 11, color: '#6366f1', marginBottom: 8, fontWeight: 500 }}>
+          拖动到目标位置松手即可排序
+        </div>
+      )}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, alignItems: "start" }}>
+        <div>{leftProjects.map(renderCard)}</div>
+        <div>{rightProjects.map(renderCard)}</div>
+      </div>
+      <AddProjectCard onCreate={onCreateProject} />
+    </div>
+  );
+}
+
 // ── Main App ─────────────────────────────────────────────────────────
 
 const TABS = [
@@ -926,8 +1049,6 @@ export default function App() {
     doneTasks: p.tasks.filter(t =>  completedIds.includes(t.id)).map(t => ({ ...t, projectAccent: p.accent, projectBg: p.bg })),
   }));
 
-  const leftProjects  = projectsWithState.filter((_, i) => i < 4);
-  const rightProjects = projectsWithState.filter((_, i) => i >= 4);
 
   // ── Handlers ─────────────────────────────────────────────────────
   const handleComplete = useCallback((taskId) => {
@@ -970,6 +1091,15 @@ export default function App() {
     if (res.ok && res.project) {
       setProjects(prev => [...prev, { ...res.project, tasks: [] }]);
     }
+  }, []);
+
+  const handleReorderProjects = useCallback(async (orderedIds) => {
+    setProjects(prev => {
+      const map = {};
+      prev.forEach(p => map[p.id] = p);
+      return orderedIds.map(id => map[id]).filter(Boolean);
+    });
+    api.reorderProjects(orderedIds);
   }, []);
 
   const handleDeleteTask = useCallback(async (id) => {
@@ -1046,13 +1176,17 @@ export default function App() {
 
         {/* Board */}
         {activeTab === "board" && (
-          <div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, alignItems: "start" }}>
-              <div>{leftProjects.map(p => <ProjectCard key={p.id} project={p} onComplete={handleComplete} onUncomplete={handleUncomplete} onAddTask={handleAddTask} onUpdateTask={handleUpdateTask} onDeleteTask={handleDeleteTask} onUpdateProject={handleUpdateProject} />)}</div>
-              <div>{rightProjects.map(p => <ProjectCard key={p.id} project={p} onComplete={handleComplete} onUncomplete={handleUncomplete} onAddTask={handleAddTask} onUpdateTask={handleUpdateTask} onDeleteTask={handleDeleteTask} onUpdateProject={handleUpdateProject} />)}</div>
-            </div>
-            <AddProjectCard onCreate={handleCreateProject} />
-          </div>
+          <BoardView
+            projects={projectsWithState}
+            onComplete={handleComplete}
+            onUncomplete={handleUncomplete}
+            onAddTask={handleAddTask}
+            onUpdateTask={handleUpdateTask}
+            onDeleteTask={handleDeleteTask}
+            onUpdateProject={handleUpdateProject}
+            onCreateProject={handleCreateProject}
+            onReorder={handleReorderProjects}
+          />
         )}
 
         {/* Week */}

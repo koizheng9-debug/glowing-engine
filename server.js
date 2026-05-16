@@ -47,6 +47,13 @@ app.put('/api/projects/:id', async (req, res) => {
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+app.post('/api/projects/reorder', async (req, res) => {
+  const { orderedIds } = req.body;
+  if (!Array.isArray(orderedIds)) return res.status(400).json({ error: 'orderedIds must be an array' });
+  try { await db.reorderProjects(orderedIds); res.json({ ok: true }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 app.post('/api/tasks', async (req, res) => {
   const { projectId, title, deadline, note, time, priority, steps, calendarOnly } = req.body;
   if (!projectId || !title || !title.trim()) {

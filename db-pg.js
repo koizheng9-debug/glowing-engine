@@ -205,4 +205,10 @@ async function setHabits(habits) {
   );
 }
 
-module.exports = { init, getState, getProjects, completeTask, uncompleteTask, toggleInProgress, assignToDay, removeFromDay, toggleDayDone, setWeeklyPeople, setDailyNotes, createTask, updateTask, deleteTask, createProject, updateProject, getHabits, setHabits };
+async function reorderProjects(orderedIds) {
+  for (let i = 0; i < orderedIds.length; i++) {
+    await q('UPDATE projects SET sort_order = $1 WHERE id = $2', [i, orderedIds[i]]);
+  }
+}
+
+module.exports = { init, getState, getProjects, completeTask, uncompleteTask, toggleInProgress, assignToDay, removeFromDay, toggleDayDone, setWeeklyPeople, setDailyNotes, createTask, updateTask, deleteTask, createProject, updateProject, getHabits, setHabits, reorderProjects };
