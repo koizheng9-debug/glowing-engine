@@ -875,6 +875,13 @@ function BoardView({ projects, onComplete, onUncomplete, onAddTask, onUpdateTask
   const [dropTarget, setDropTarget] = useState(null); // { col, index }
   const longPressTimer = useRef(null);
   const touchStartPos = useRef(null);
+  // Refs to avoid stale closures in touch handlers
+  const draggingIdRef = useRef(null);
+  const dropTargetRef = useRef(null);
+  const columnsRef = useRef([[], [], []]);
+
+  const setDragging = (id) => { draggingIdRef.current = id; setDraggingId(id); };
+  const setDrop = (target) => { dropTargetRef.current = target; setDropTarget(target); };
 
   // Split projects into 3 columns based on board_column
   const columns = [[], [], []];
@@ -883,49 +890,51 @@ function BoardView({ projects, onComplete, onUncomplete, onAddTask, onUpdateTask
     columns[col].push(p);
   });
   columns.forEach(col => col.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)));
+  columnsRef.current = columns;
 
-  const executeDrop = (targetCol, targetIndex) => {
-    if (!draggingId) return;
-    onMoveProject(draggingId, targetCol, targetIndex);
-    setDraggingId(null);
-    setDropTarget(null);
+  const executeDrop = (srcId, targetCol, targetIndex) => {
+    if (!srcId) return;
+    onMoveProject(srcId, targetCol, targetIndex);
+    setDragging(null);
+    setDrop(null);
   };
 
   // Desktop drag handlers
   const handleDragStart = (e, id) => {
-    setDraggingId(id);
+    setDragging(id);
     e.dataTransfer.effectAllowed = 'move';
   };
-  const handleDragEnd = () => { setDraggingId(null); setDropTarget(null); };
+  const handleDragEnd = () => { setDragging(null); setDrop(null); };
 
   const handleCardDragOver = (e, col, index) => {
     e.preventDefault();
-    setDropTarget({ col, index });
+    setDrop({ col, index });
   };
   const handleCardDrop = (e, col, index) => {
     e.preventDefault();
-    executeDrop(col, index);
+    executeDrop(draggingIdRef.current, col, index);
   };
   // Drop on empty area at bottom of column
   const handleColDragOver = (e, col) => {
     e.preventDefault();
-    setDropTarget({ col, index: columns[col].length });
+    setDrop({ col, index: columnsRef.current[col].length });
   };
   const handleColDrop = (e, col) => {
     e.preventDefault();
-    executeDrop(col, columns[col].length);
+    executeDrop(draggingIdRef.current, col, columnsRef.current[col].length);
   };
 
   // Touch long-press for mobile
   const handleTouchStart = (e, id) => {
     touchStartPos.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
     longPressTimer.current = setTimeout(() => {
-      setDraggingId(id);
+      setDragging(id);
       if (navigator.vibrate) navigator.vibrate(30);
     }, 500);
   };
   const handleTouchMove = (e) => {
-    if (!draggingId) {
+    const curDragging = draggingIdRef.current;
+    if (!curDragging) {
       if (touchStartPos.current) {
         const dx = Math.abs(e.touches[0].clientX - touchStartPos.current.x);
         const dy = Math.abs(e.touches[0].clientY - touchStartPos.current.y);
@@ -936,14 +945,14 @@ function BoardView({ projects, onComplete, onUncomplete, onAddTask, onUpdateTask
     e.preventDefault();
     const touch = e.touches[0];
     const tx = touch.clientX, ty = touch.clientY;
-    // Find drop target by checking bounding rects of all cards (not elementsFromPoint)
+    // Find drop target by checking bounding rects of all cards
     const allCards = document.querySelectorAll('[data-board-col][data-board-idx]');
     let found = false;
     for (const el of allCards) {
-      if (el.getAttribute('data-project-id') === draggingId) continue;
+      if (el.getAttribute('data-project-id') === curDragging) continue;
       const rect = el.getBoundingClientRect();
       if (tx >= rect.left && tx <= rect.right && ty >= rect.top && ty <= rect.bottom) {
-        setDropTarget({ col: parseInt(el.getAttribute('data-board-col')), index: parseInt(el.getAttribute('data-board-idx')) });
+        setDrop({ col: parseInt(el.getAttribute('data-board-col')), index: parseInt(el.getAttribute('data-board-idx')) });
         found = true;
         break;
       }
@@ -955,7 +964,7 @@ function BoardView({ projects, onComplete, onUncomplete, onAddTask, onUpdateTask
         const rect = el.getBoundingClientRect();
         if (tx >= rect.left && tx <= rect.right && ty >= rect.top && ty <= rect.bottom) {
           const col = parseInt(el.getAttribute('data-board-col'));
-          setDropTarget({ col, index: columns[col].length });
+          setDrop({ col, index: columnsRef.current[col].length });
           break;
         }
       }
@@ -963,11 +972,13 @@ function BoardView({ projects, onComplete, onUncomplete, onAddTask, onUpdateTask
   };
   const handleTouchEnd = () => {
     clearTimeout(longPressTimer.current);
-    if (draggingId && dropTarget) {
-      executeDrop(dropTarget.col, dropTarget.index);
+    const curDragging = draggingIdRef.current;
+    const curDrop = dropTargetRef.current;
+    if (curDragging && curDrop) {
+      executeDrop(curDragging, curDrop.col, curDrop.index);
     }
-    setDraggingId(null);
-    setDropTarget(null);
+    setDragging(null);
+    setDrop(null);
   };
 
   const renderCard = (p, col, index) => {
