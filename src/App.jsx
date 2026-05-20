@@ -239,7 +239,7 @@ function AddTaskInline({ project, onAdd }) {
   );
 }
 
-function ProjectCard({ project, onComplete, onUncomplete, onAddTask, onUpdateTask, onDeleteTask, onUpdateProject }) {
+function ProjectCard({ project, onComplete, onUncomplete, onAddTask, onUpdateTask, onDeleteTask, onUpdateProject, onDeleteProject }) {
   const [open, setOpen] = useState(true);
   const [showReason, setShowReason] = useState(false);
   const [editingProject, setEditingProject] = useState(false);
@@ -330,9 +330,12 @@ function ProjectCard({ project, onComplete, onUncomplete, onAddTask, onUpdateTas
                 placeholder="为什么做这个项目？"
                 rows={2}
                 style={{ width: "100%", fontSize: 11.5, border: "1px solid #e5e7eb", borderRadius: 6, padding: "5px 8px", fontFamily: "inherit", color: "#6b7280", resize: "none", marginBottom: 8, boxSizing: "border-box" }} />
-              <div style={{ display: "flex", gap: 6 }}>
+              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                 <button onClick={saveProject} style={{ fontSize: 11, padding: "3px 10px", borderRadius: 6, border: "none", background: project.accent, color: "#fff", cursor: "pointer", fontWeight: 600 }}>保存</button>
                 <button onClick={cancelProjectEdit} style={{ fontSize: 11, padding: "3px 8px", borderRadius: 6, border: "1px solid #e5e7eb", background: "#fff", color: "#9ca3af", cursor: "pointer" }}>取消</button>
+                <div style={{ flex: 1 }} />
+                <button onClick={() => { if (window.confirm(`确定删除「${project.title}」及其所有任务？`)) { onDeleteProject && onDeleteProject(project.id); } }}
+                  style={{ fontSize: 11, padding: "3px 8px", borderRadius: 6, border: "1px solid #fca5a5", background: "#fff", color: "#ef4444", cursor: "pointer" }}>删除项目</button>
               </div>
             </div>
           ) : (
@@ -870,7 +873,7 @@ function PastWeeksView({ allTasksFlat, calendarMap, dayDoneMap, completedIds, we
 
 // ── Board View with drag-to-reorder ─────────────────────────────────
 
-function BoardView({ projects, onComplete, onUncomplete, onAddTask, onUpdateTask, onDeleteTask, onUpdateProject, onCreateProject, onMoveProject }) {
+function BoardView({ projects, onComplete, onUncomplete, onAddTask, onUpdateTask, onDeleteTask, onUpdateProject, onDeleteProject, onCreateProject, onMoveProject }) {
   const [draggingId, setDraggingId] = useState(null);
   const [dropTarget, setDropTarget] = useState(null); // { col, index }
   const longPressTimer = useRef(null);
@@ -1012,6 +1015,7 @@ function BoardView({ projects, onComplete, onUncomplete, onAddTask, onUpdateTask
           onUpdateTask={onUpdateTask}
           onDeleteTask={onDeleteTask}
           onUpdateProject={onUpdateProject}
+          onDeleteProject={onDeleteProject}
         />
       </div>
     );
@@ -1150,6 +1154,11 @@ export default function App() {
     }
   }, []);
 
+  const handleDeleteProject = useCallback(async (id) => {
+    await api.deleteProject(id);
+    setProjects(prev => prev.filter(p => p.id !== id));
+  }, []);
+
   const handleReorderProjects = useCallback(async (orderedIds) => {
     setProjects(prev => {
       const map = {};
@@ -1261,6 +1270,7 @@ export default function App() {
             onUpdateTask={handleUpdateTask}
             onDeleteTask={handleDeleteTask}
             onUpdateProject={handleUpdateProject}
+            onDeleteProject={handleDeleteProject}
             onCreateProject={handleCreateProject}
             onMoveProject={handleMoveProject}
           />

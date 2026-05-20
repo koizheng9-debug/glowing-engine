@@ -200,6 +200,19 @@ async function updateProject(id, { title, emoji, reason }) {
     [title, emoji || '', reason || '', id]);
 }
 
+async function deleteProject(id) {
+  // Delete all tasks belonging to this project, plus their related data
+  const { rows: tasks } = await q('SELECT id FROM tasks WHERE project_id = $1', [id]);
+  for (const t of tasks) {
+    await q('DELETE FROM task_completed WHERE task_id = $1', [t.id]);
+    await q('DELETE FROM task_in_progress WHERE task_id = $1', [t.id]);
+    await q('DELETE FROM calendar_assignments WHERE task_id = $1', [t.id]);
+    await q('DELETE FROM day_done WHERE task_id = $1', [t.id]);
+  }
+  await q('DELETE FROM tasks WHERE project_id = $1', [id]);
+  await q('DELETE FROM projects WHERE id = $1', [id]);
+}
+
 async function deleteTask(id) {
   await q('DELETE FROM tasks WHERE id = $1', [id]);
   await q('DELETE FROM task_completed WHERE task_id = $1', [id]);
@@ -238,4 +251,4 @@ async function moveProject(projectId, targetColumn, targetIndex) {
   }
 }
 
-module.exports = { init, getState, getProjects, completeTask, uncompleteTask, toggleInProgress, assignToDay, removeFromDay, toggleDayDone, setWeeklyPeople, setDailyNotes, createTask, updateTask, deleteTask, createProject, updateProject, getHabits, setHabits, reorderProjects, moveProject };
+module.exports = { init, getState, getProjects, completeTask, uncompleteTask, toggleInProgress, assignToDay, removeFromDay, toggleDayDone, setWeeklyPeople, setDailyNotes, createTask, updateTask, deleteTask, createProject, updateProject, deleteProject, getHabits, setHabits, reorderProjects, moveProject };

@@ -172,6 +172,18 @@ async function updateProject(id, { title, emoji, reason }) {
   db.prepare('UPDATE projects SET title = ?, emoji = ?, reason = ? WHERE id = ?').run(title, emoji || '', reason || '', id);
 }
 
+async function deleteProject(id) {
+  const tasks = db.prepare('SELECT id FROM tasks WHERE project_id = ?').all(id);
+  for (const t of tasks) {
+    db.prepare('DELETE FROM task_completed WHERE task_id = ?').run(t.id);
+    db.prepare('DELETE FROM task_in_progress WHERE task_id = ?').run(t.id);
+    db.prepare('DELETE FROM calendar_assignments WHERE task_id = ?').run(t.id);
+    db.prepare('DELETE FROM day_done WHERE task_id = ?').run(t.id);
+  }
+  db.prepare('DELETE FROM tasks WHERE project_id = ?').run(id);
+  db.prepare('DELETE FROM projects WHERE id = ?').run(id);
+}
+
 async function deleteTask(id) {
   db.prepare('DELETE FROM tasks WHERE id = ?').run(id);
   db.prepare('DELETE FROM task_completed WHERE task_id = ?').run(id);
@@ -210,4 +222,4 @@ async function moveProject(projectId, targetColumn, targetIndex) {
   }
 }
 
-module.exports = { init, getState, getProjects, completeTask, uncompleteTask, toggleInProgress, assignToDay, removeFromDay, toggleDayDone, setWeeklyPeople, createTask, updateTask, deleteTask, createProject, updateProject, getHabits, setHabits, reorderProjects, moveProject };
+module.exports = { init, getState, getProjects, completeTask, uncompleteTask, toggleInProgress, assignToDay, removeFromDay, toggleDayDone, setWeeklyPeople, createTask, updateTask, deleteTask, createProject, updateProject, deleteProject, getHabits, setHabits, reorderProjects, moveProject };

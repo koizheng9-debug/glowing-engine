@@ -25,6 +25,11 @@ export async function updateProject(id, { title, emoji, reason }) {
   return res.json();
 }
 
+export async function deleteProject(id) {
+  const res = await fetch(`/api/projects/${id}`, { method: 'DELETE' });
+  return res.json();
+}
+
 export async function reorderProjects(orderedIds) {
   await fetch('/api/projects/reorder', {
     method: 'POST',
